@@ -7,7 +7,7 @@ import sys
 
 import pytest
 
-from prompts import ANALYSIS_PROMPT, SYSTEM_RULES, UPLOADED_FILE_TASK
+from analyst.agent.prompts import ANALYSIS_PROMPT, SYSTEM_RULES, UPLOADED_FILE_TASK
 
 RENDERED = SYSTEM_RULES.format(python_path=sys.executable, output_dir="./output")
 

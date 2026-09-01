@@ -11,7 +11,7 @@ import os
 
 import requests
 
-from formatting import chunk_text, strip_html, to_html
+from analyst.plumbing.formatting import chunk_text, strip_html, to_html
 
 # sendPhoto's documented ceiling; larger files must go as documents.
 PHOTO_MAX_BYTES = 10 * 1024 * 1024

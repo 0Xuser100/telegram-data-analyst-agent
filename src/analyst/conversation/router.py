@@ -7,16 +7,16 @@ so a test can hand it doubles.
 
 import os
 
-from approvals import (
+from analyst.conversation.approvals import (
     DETAILS_ACTION,
     SUPPORTED_DECISIONS,
     TelegramApprover,
     actions_in,
     decisions_for,
 )
-from delivery import final_text
-from formatting import safe_filename
-from tracing import NullTracer
+from analyst.conversation.delivery import final_text
+from analyst.plumbing.formatting import safe_filename
+from analyst.plumbing.tracing import NullTracer
 
 
 def _short(text: str, limit: int = 40) -> str:

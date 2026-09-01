@@ -36,16 +36,26 @@ downward only; nothing lower ever imports something higher.
 
 ```
    ┌─────────────────────────────────────────────────────────────┐
-   │  ENTRY POINTS        main.py            telegram_bot.py     │  wiring
+   │  entrypoints/        cli.py             bot.py              │  wiring
    ├─────────────────────────────────────────────────────────────┤
-   │  CONVERSATION        router.py   delivery.py   approvals.py │  decisions
+   │  conversation/       router.py   delivery.py   approvals.py │  decisions
    ├─────────────────────────────────────────────────────────────┤
-   │  AGENT               agent.py    runner.py    prompts.py    │  the work
+   │  agent/       builder.py  runner.py  prompts.py  pending.py │  the work
    ├─────────────────────────────────────────────────────────────┤
-   │  PLUMBING   telegram_client  formatting  artifacts  tracing │  mechanics
-   │             thread_store     progress    backend    config  │
+   │  plumbing/  telegram_client  formatting  artifacts  tracing │  mechanics
+   │             thread_store     progress    backend           │
    └─────────────────────────────────────────────────────────────┘
 ```
+
+Each layer is a package under `src/analyst/`, so the rule is not a naming
+convention — it is the directory structure. `analyst.config` sits outside the
+four: it has no internal imports at all, so any layer may read it.
+
+The rule used to be prose, and prose does not fail a build. It had in fact been
+broken: `runner` (agent) imported the approval cards (conversation). Splitting
+`pending.py` — the interrupt as data — out of `approvals.py` — the card and the
+question — fixed the direction, and `tests/test_layers.py` now walks every
+import in every module and fails if one points upward.
 
 | Layer | Answers | Knows nothing about |
 |---|---|---|
@@ -72,8 +82,9 @@ network and no model.
 | `ThreadStore` | which conversation each chat is on | sqlite |
 | `TaskTracer` | one LangSmith trace per task, re-attached after a restart | sqlite, langsmith |
 | `Approver` | ask a human — buttons, or a terminal prompt | client (Telegram only) |
-| `agent.py` | build the model, memory, compaction, approval rules | deepagents, LangChain |
-| `prompts.py` | the behaviour rules, in words | nothing |
+| `agent/builder.py` | build the model, memory, compaction, approval rules | deepagents, LangChain |
+| `agent/pending.py` | a paused run's interrupt, flattened into `PendingAction` values | nothing |
+| `agent/prompts.py` | the behaviour rules, in words | nothing |
 
 ## 4. How a run flows
 
@@ -103,7 +114,7 @@ is not optional here.
 ### Terminal, same loop
 
 ```
-  uv run main.py ──► run_to_completion(runner, thread, task, ConsoleApprover)
+  uv run analyst-cli ──► run_to_completion(runner, thread, task, ConsoleApprover)
                           │
                           └─ ask at the prompt, resume, repeat
 ```
@@ -164,7 +175,7 @@ conversations of any length thanks to compaction.
 Where it would need changing:
 
 - **Two bot instances** — sqlite is single-writer. Move to `PostgresSaver`; the
-  interface is the same one line in `agent.py`.
+  interface is the same one line in `agent/builder.py`.
 - **Concurrent runs in one chat** — the router refuses a second run while one is
   paused. Lifting that needs per-run keys instead of per-chat ones.
 - **Untrusted users** — approval is a safeguard, not a sandbox. Swap
@@ -174,7 +185,7 @@ Where it would need changing:
 
 ## 9. What was verified, and how
 
-- 418 offline tests, ~12 seconds, 99% coverage. No network, no model calls, a
+- 442 offline tests, ~12 seconds, 99% coverage. No network, no model calls, a
   temp working directory. See [TESTING.md](TESTING.md).
 - One end-to-end test against the real API on `gpt-4.1-mini-2025-04-14`,
   opt-in with `RUN_E2E=1`. It approves every gate, then checks that a script was

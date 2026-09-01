@@ -2,9 +2,7 @@
 
 import pytest
 
-import formatting as fmt
-
-
+from analyst.plumbing import formatting as fmt
 # --------------------------------------------------------------------------
 # to_html
 # --------------------------------------------------------------------------

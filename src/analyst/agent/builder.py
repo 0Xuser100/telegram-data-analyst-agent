@@ -16,9 +16,9 @@ from langchain.agents.middleware import TodoListMiddleware
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.sqlite import SqliteSaver
 
-from backend import backend
-from config import get_settings
-from prompts import SYSTEM_RULES
+from analyst.plumbing.backend import backend
+from analyst.config import get_settings
+from analyst.agent.prompts import SYSTEM_RULES
 
 CHECKPOINT_DB = "checkpoints.sqlite"
 OUTPUT_DIR = "./output"

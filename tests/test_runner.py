@@ -11,7 +11,7 @@ from conftest import (
     ai_result,
     interrupt_result,
 )
-from runner import AgentRunner, SilentProgress, TooManyApprovals, run_to_completion
+from analyst.agent.runner import AgentRunner, SilentProgress, TooManyApprovals, run_to_completion
 
 THREAD = "555-1"
 

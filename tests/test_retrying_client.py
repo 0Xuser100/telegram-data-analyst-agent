@@ -7,7 +7,7 @@ runs for days on a home connection: a dropped packet should not lose a card.
 import pytest
 import requests
 
-from retrying_client import RetryingClient
+from analyst.plumbing.retrying_client import RetryingClient
 
 
 class FlakyClient:
@@ -90,7 +90,7 @@ def test_every_transient_error_is_retried(error):
 
 def test_a_real_error_is_not_retried():
     """A rejected request is not a network problem: retrying just repeats it."""
-    from telegram_client import TelegramError
+    from analyst.plumbing.telegram_client import TelegramError
 
     flaky = FlakyClient(failures=1, error=TelegramError("chat not found"))
     with pytest.raises(TelegramError):
@@ -137,7 +137,7 @@ def test_unknown_methods_pass_through():
 
 def test_it_can_stand_in_for_the_real_client(client, graph):
     """The bot must not care which one it was handed."""
-    import telegram_bot as bot
+    from analyst.entrypoints import bot
     from conftest import ai_result, text_update
 
     built = bot.build_bot(client=wrap(client), graph=graph)

@@ -6,8 +6,8 @@ reply plus whatever figures the run produced.
 
 import os
 
-from approvals import TelegramApprover, actions_in
-from artifacts import ArtifactCollector
+from analyst.conversation.approvals import TelegramApprover, actions_in
+from analyst.plumbing.artifacts import ArtifactCollector
 
 NO_TEXT_REPLY = "Done, but the agent produced no text reply."
 

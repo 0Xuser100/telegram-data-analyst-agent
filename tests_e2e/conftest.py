@@ -73,8 +73,8 @@ def live_agent(sandbox_cwd):
     if os.environ.get("OPENAI_API_KEY", "").startswith("sk-test"):
         pytest.skip("fake credentials are loaded; run this file on its own")
 
-    import agent
-    from backend import ensure_sample_data
+    from analyst.agent import builder as agent
+    from analyst.plumbing.backend import ensure_sample_data
 
     ensure_sample_data()          # the sandbox needs something to analyse
 

@@ -11,7 +11,7 @@ pytestmark = pytest.mark.slow
 
 @pytest.fixture(scope="module")
 def mod():
-    import agent
+    from analyst.agent import builder as agent
     return agent
 
 

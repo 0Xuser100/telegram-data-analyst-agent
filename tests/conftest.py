@@ -255,19 +255,19 @@ def graph():
 
 @pytest.fixture
 def threads(tmp_path):
-    from thread_store import ThreadStore
+    from analyst.plumbing.thread_store import ThreadStore
     return ThreadStore(str(tmp_path / "threads.sqlite"))
 
 
 @pytest.fixture
 def collector(clean_output):
-    from artifacts import ArtifactCollector
+    from analyst.plumbing.artifacts import ArtifactCollector
     return ArtifactCollector(clean_output)
 
 
 @pytest.fixture
 def delivery(client, collector):
-    from delivery import ResultDelivery
+    from analyst.conversation.delivery import ResultDelivery
     return ResultDelivery(client, collector)
 
 
@@ -278,7 +278,7 @@ def progress():
 
 @pytest.fixture
 def runner(graph, progress):
-    from runner import AgentRunner
+    from analyst.agent.runner import AgentRunner
     # 50ms rather than 4s: the tests assert on the announcement, not on waiting.
     return AgentRunner(graph, progress=progress, announce_after=0.05)
 
@@ -291,9 +291,9 @@ def tracer():
 @pytest.fixture
 def router(client, runner, threads, delivery, tracer):
     """A real router with fake edges: fake client, fake graph, temp database."""
-    from progress import ChatProgress
-    from prompts import UPLOADED_FILE_TASK
-    from router import UpdateRouter
+    from analyst.plumbing.progress import ChatProgress
+    from analyst.agent.prompts import UPLOADED_FILE_TASK
+    from analyst.conversation.router import UpdateRouter
 
     return UpdateRouter(
         client=client,

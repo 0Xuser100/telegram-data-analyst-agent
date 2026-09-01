@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from config import Settings, apply_tracing_env, get_settings
+from analyst.config import Settings, apply_tracing_env, get_settings
 
 BASE = {
     "LANGSMITH_TRACING": True,

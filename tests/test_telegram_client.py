@@ -2,9 +2,7 @@
 
 import pytest
 
-import telegram_client as tc
-
-
+from analyst.plumbing import telegram_client as tc
 @pytest.fixture
 def api(monkeypatch):
     """Records each call and replies OK. Returns a list of (url, payload)."""

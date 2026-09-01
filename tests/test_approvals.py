@@ -2,7 +2,7 @@
 
 import pytest
 
-import approvals as ap
+from analyst.conversation import approvals as ap
 from conftest import EXECUTE_ACTION, WRITE_FILE_ACTION, FakeInterrupt, interrupt_result
 
 

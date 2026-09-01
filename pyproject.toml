@@ -16,11 +16,25 @@ dependencies = [
     "seaborn>=0.13.2",
 ]
 
+# `uv run analyst-cli` / `uv run analyst-bot`. Both resolve paths against the
+# working directory, so run them from the repository root: .env, data/ and
+# output/ are all cwd-relative.
+[project.scripts]
+analyst-cli = "analyst.entrypoints.cli:main"
+analyst-bot = "analyst.entrypoints.bot:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/analyst"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# The project is a flat package-less layout, and tests/ is on the path too so
+# src/ holds the `analyst` package; tests/ is on the path too so
 # `from conftest import ...` works for the shared builders.
-pythonpath = [".", "tests"]
+pythonpath = ["src", "tests"]
 addopts = "-q --strict-markers"
 markers = [
     "slow: builds the whole deep agent graph (a few seconds, still offline)",

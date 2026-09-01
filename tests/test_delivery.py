@@ -5,7 +5,7 @@ import os
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from conftest import EXECUTE_ACTION, WRITE_FILE_ACTION, interrupt_result
-from delivery import ResultDelivery, final_text
+from analyst.conversation.delivery import ResultDelivery, final_text
 
 CHAT = 555
 

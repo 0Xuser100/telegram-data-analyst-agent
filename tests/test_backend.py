@@ -3,9 +3,7 @@
 import csv
 import os
 
-import backend as bk
-
-
+from analyst.plumbing import backend as bk
 def test_importing_the_module_writes_nothing(sandbox):
     """Creating the backend must not touch the disk; the old version wrote the
     sample CSV as an import side effect."""

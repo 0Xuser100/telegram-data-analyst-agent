@@ -67,9 +67,9 @@ def test_the_model_answers(live_agent):
 @pytest.fixture(scope="module")
 def analysis(live_agent):
     """Run the real analysis once, approving every step, and return the reply."""
-    from delivery import final_text
-    from prompts import UPLOADED_FILE_TASK
-    from runner import AgentRunner, TooManyApprovals, run_to_completion
+    from analyst.conversation.delivery import final_text
+    from analyst.agent.prompts import UPLOADED_FILE_TASK
+    from analyst.agent.runner import AgentRunner, TooManyApprovals, run_to_completion
 
     task = UPLOADED_FILE_TASK.format(
         file_path="./data/sales_data.csv", output_dir="./output"

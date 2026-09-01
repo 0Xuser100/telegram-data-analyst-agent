@@ -2,18 +2,28 @@
 
 Describing a tool is a registry, not an if/elif chain: a new tool needs a new
 entry here, not a change to the code that renders the card.
+
+The data types live one layer down in `analyst.agent.pending`, because *what*
+the agent is paused on is agent state, while *how* a human is asked is a
+conversation concern. They are re-exported here so this module stays the single
+import site for anything approval-related in a front-end.
 """
 
 import html
 import json
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Callable, Protocol
 
-from formatting import human_size, shorten_interpreter, strip_html, tidy_path
-
-# edit/respond need a follow-up conversation the bot does not have.
-SUPPORTED_DECISIONS = ("approve", "reject")
+from analyst.agent.pending import (  # re-exported: see the module docstring
+    REJECT_MESSAGE,
+    SUPPORTED_DECISIONS,
+    PendingAction,
+    actions_in,
+    decisions_for,
+    pending_actions,
+)
+from analyst.plumbing.formatting import human_size, shorten_interpreter, strip_html, tidy_path
 
 # Not a decision: it reprints the request without resuming the graph.
 DETAILS_ACTION = "details"
@@ -24,27 +34,11 @@ LABELS = {
     DETAILS_ACTION: "🔍 Show details",
 }
 
-REJECT_MESSAGE = "User rejected this action. Do not retry it."
-
 _FILE_KINDS = {
     ".py": "Python script", ".sh": "Shell script", ".sql": "SQL file",
     ".json": "JSON file", ".csv": "CSV file", ".md": "Note",
     ".txt": "Text file", ".yml": "YAML file", ".yaml": "YAML file",
 }
-
-
-@dataclass(frozen=True)
-class PendingAction:
-    """One tool call waiting for a decision."""
-
-    name: str
-    args: dict = field(default_factory=dict)
-    allowed_decisions: tuple[str, ...] = SUPPORTED_DECISIONS
-
-    @property
-    def offered_decisions(self) -> tuple[str, ...]:
-        offered = tuple(d for d in self.allowed_decisions if d in SUPPORTED_DECISIONS)
-        return offered or SUPPORTED_DECISIONS
 
 
 @dataclass(frozen=True)
@@ -123,30 +117,6 @@ def describe(action: PendingAction) -> Card:
     return DESCRIBERS.get(action.name, _describe_unknown)(action)
 
 
-def pending_actions(interrupts) -> list[PendingAction]:
-    """Flatten LangGraph interrupts into the actions waiting for a decision."""
-    actions: list[PendingAction] = []
-    for interrupt in interrupts or ():
-        value = getattr(interrupt, "value", {}) or {}
-        allowed = {
-            config.get("action_name"): tuple(config.get("allowed_decisions", ()))
-            for config in value.get("review_configs", [])
-        }
-        for request in value.get("action_requests", []):
-            name = request.get("name", "?")
-            actions.append(PendingAction(
-                name=name,
-                args=request.get("args", {}) or {},
-                allowed_decisions=allowed.get(name) or SUPPORTED_DECISIONS,
-            ))
-    return actions
-
-
-def actions_in(result: dict) -> list[PendingAction]:
-    """What a finished invoke is now waiting for, if anything."""
-    return pending_actions((result or {}).get("__interrupt__"))
-
-
 def raw_args(args: dict, limit: int = 3200) -> str:
     """Tool args can hold a whole generated script, which alone blows past
     Telegram's message limit."""
@@ -154,13 +124,6 @@ def raw_args(args: dict, limit: int = 3200) -> str:
     if len(text) > limit:
         text = text[:limit] + f"\n… (+{len(text) - limit} more characters)"
     return text
-
-
-def decisions_for(choice: str, count: int) -> list[dict]:
-    """One decision per pending action, in order."""
-    if choice == "approve":
-        return [{"type": "approve"} for _ in range(count)]
-    return [{"type": "reject", "message": REJECT_MESSAGE} for _ in range(count)]
 
 
 # --------------------------------------------------------------------------
@@ -204,7 +167,7 @@ class TelegramApprover:
 class ConsoleApprover:
     """Terminal version: prints the card and blocks on input().
 
-    Used by main.py. Unlike Telegram, the process can simply wait.
+    Used by entrypoints/cli.py. Unlike Telegram, the process can simply wait.
     """
 
     def __init__(self, prompt=input, out=print):

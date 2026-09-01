@@ -16,17 +16,17 @@ Each module has one job, and one reason to change.
 
 | Module | Its one job | Changes when |
 |---|---|---|
-| `telegram_client.py` | talk to the Bot API | Telegram changes its API |
-| `formatting.py` | turn text into what a chat accepts | the markup rules change |
-| `approvals.py` | present a pending call and collect a decision | a new tool appears |
-| `artifacts.py` | find the charts a run produced | output conventions change |
-| `runner.py` | run and resume the graph | the LangGraph API changes |
-| `delivery.py` | decide what the user sees | the reply format changes |
-| `router.py` | decide what an update means | a new command or upload rule |
-| `thread_store.py` | remember which conversation a chat is on | the reset policy changes |
-| `tracing.py` | keep one trace per task | the tracing backend changes |
+| `plumbing/telegram_client.py` | talk to the Bot API | Telegram changes its API |
+| `plumbing/formatting.py` | turn text into what a chat accepts | the markup rules change |
+| `conversation/approvals.py` | present a pending call and collect a decision | a new tool appears |
+| `plumbing/artifacts.py` | find the charts a run produced | output conventions change |
+| `agent/runner.py` | run and resume the graph | the LangGraph API changes |
+| `conversation/delivery.py` | decide what the user sees | the reply format changes |
+| `conversation/router.py` | decide what an update means | a new command or upload rule |
+| `plumbing/thread_store.py` | remember which conversation a chat is on | the reset policy changes |
+| `plumbing/tracing.py` | keep one trace per task | the tracing backend changes |
 
-**Before:** `telegram_bot.py` was 470 lines doing all of it — HTTP, HTML,
+**Before:** `entrypoints/bot.py` was 470 lines doing all of it — HTTP, HTML,
 approval rendering, image discovery, routing, and the loop.
 **After:** 132 lines of wiring plus a polling loop.
 
@@ -37,7 +37,7 @@ discovery with a directory and a string — no Telegram, no agent, no mocks.
 
 Two places where new behaviour means adding, not editing.
 
-**A new tool to describe** — `approvals.py`:
+**A new tool to describe** — `conversation/approvals.py`:
 
 ```python
 @describes("deploy")
@@ -49,7 +49,7 @@ def _describe_deploy(action: PendingAction) -> Card:
 Guarded by `test_a_new_tool_needs_only_a_registry_entry`, which registers a
 describer at runtime and removes it again.
 
-**A new bot command** — `router.py`:
+**A new bot command** — `conversation/router.py`:
 
 ```python
 COMMANDS = {"/start": "_command_help", "/help": "_command_help",
@@ -66,7 +66,7 @@ Anything shaped like an `Approver` can stand in for any other, and the run loop
 cannot tell:
 
 ```python
-run_to_completion(runner, thread_id, task, ConsoleApprover())   # main.py
+run_to_completion(runner, thread_id, task, ConsoleApprover())   # entrypoints/cli.py
 run_to_completion(runner, thread_id, task, LoudApprover())      # tests_e2e
 ```
 
@@ -106,8 +106,8 @@ ResultDelivery(client, artifacts)
 ArtifactCollector(output_dir="./output", clock=time.time)
 ```
 
-`build_bot()` in `telegram_bot.py` is the single composition root — the only
-function that knows every concrete class. That inversion is what makes 418 tests
+`build_bot()` in `entrypoints/bot.py` is the single composition root — the only
+function that knows every concrete class. That inversion is what makes 442 tests
 run with no network, no API key, and no model: the tests do the wiring instead.
 
 Even the clock is injected, so chart-discovery tests are deterministic
@@ -128,7 +128,7 @@ Even the clock is injected, so chart-discovery tests are deterministic
 | [Facade](#facade) | `telegram_bot.Bot` | `main` should not assemble a loop |
 | [Value object](#value-object) | `PendingAction`, `Card` | a pending call must not change while it waits |
 | [Repository](#repository) | `thread_store.ThreadStore`, `tracing.TraceStore` | "which conversation?" and "which open trace?" behind a few methods |
-| [Composition root](#composition-root) | `telegram_bot.build_bot` | one place that knows the wiring |
+| [Composition root](#composition-root) | `entrypoints/bot.py` → `build_bot` | one place that knows the wiring |
 | [Test double](#test-double) | `tests/conftest.py` | prove behaviour without a network |
 
 ### Registry
@@ -178,7 +178,7 @@ def run_to_completion(runner, thread_id, task, approver, max_rounds=12, **kwargs
 ```
 
 The skeleton is fixed; the one varying step is delegated. This replaced three
-hand-written copies of the loop (`main.py`, the e2e test, and an earlier version
+hand-written copies of the loop (`entrypoints/cli.py`, the e2e test, and an earlier version
 in the bot). The round cap is the reason a stuck agent cannot spend money
 forever.
 
@@ -190,7 +190,7 @@ class ChatProgress:
     def note(self, message): self._client.send_message(self._chat_id, message)
 ```
 
-A Telegram client has no `busy()`. This gives it one, so `runner.py` never
+A Telegram client has no `busy()`. This gives it one, so `agent/runner.py` never
 imports a client and never learns what a chat is.
 
 ### Decorator
@@ -335,4 +335,4 @@ or a real coupling. Otherwise it is a layer to read past.
 | A restart re-attaches to the same trace | `test_a_resume_after_a_restart_finds_the_same_parent` |
 | Tracing never breaks a run | `test_a_failure_to_open_is_swallowed` |
 
-418 offline tests, ~12 seconds, 99% line coverage, no network and no model calls.
+442 offline tests, ~12 seconds, 99% line coverage, no network and no model calls.

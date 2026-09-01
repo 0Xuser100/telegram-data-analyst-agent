@@ -8,7 +8,7 @@ from contextlib import contextmanager
 
 import pytest
 
-from tracing import NullTracer, TaskTracer, TraceStore, build_tracer
+from analyst.plumbing.tracing import NullTracer, TaskTracer, TraceStore, build_tracer
 
 THREAD = "555-1"
 
@@ -206,7 +206,7 @@ def test_attached_sets_the_parent_when_there_is_one(tracer, monkeypatch):
         seen.update(kwargs)
         yield
 
-    monkeypatch.setattr("tracing.tracing_context", fake_tracing_context)
+    monkeypatch.setattr("analyst.plumbing.tracing.tracing_context", fake_tracing_context)
     tracer.start(THREAD, "task")
     with tracer.attached(THREAD):
         pass

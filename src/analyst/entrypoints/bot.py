@@ -1,30 +1,30 @@
 """Telegram front-end. Builds the parts and polls for updates.
 
 The Telegram message *is* the task. Execution rules live in the system prompt
-(prompts.py), so messages carry no boilerplate.
+(agent/prompts.py), so messages carry no boilerplate.
 
-Run with:  uv run telegram_bot.py
+Run with:  uv run analyst-bot  (from the repository root)
 """
 
 import traceback
 from dataclasses import dataclass
 
-from config import apply_tracing_env, get_settings
+from analyst.config import apply_tracing_env, get_settings
 
 settings = get_settings()
 apply_tracing_env(settings)          # before the graph is imported
 
-from agent import CHECKPOINT_DB, agent  # noqa: E402
-from artifacts import ArtifactCollector  # noqa: E402
-from delivery import ResultDelivery  # noqa: E402
-from progress import ChatProgress  # noqa: E402
-from retrying_client import RetryingClient  # noqa: E402
-from prompts import UPLOADED_FILE_TASK  # noqa: E402
-from router import UpdateRouter  # noqa: E402
-from runner import AgentRunner  # noqa: E402
-from telegram_client import TelegramClient  # noqa: E402
-from thread_store import ThreadStore  # noqa: E402
-from tracing import build_tracer  # noqa: E402
+from analyst.agent.builder import CHECKPOINT_DB, agent  # noqa: E402
+from analyst.plumbing.artifacts import ArtifactCollector  # noqa: E402
+from analyst.conversation.delivery import ResultDelivery  # noqa: E402
+from analyst.plumbing.progress import ChatProgress  # noqa: E402
+from analyst.plumbing.retrying_client import RetryingClient  # noqa: E402
+from analyst.agent.prompts import UPLOADED_FILE_TASK  # noqa: E402
+from analyst.conversation.router import UpdateRouter  # noqa: E402
+from analyst.agent.runner import AgentRunner  # noqa: E402
+from analyst.plumbing.telegram_client import TelegramClient  # noqa: E402
+from analyst.plumbing.thread_store import ThreadStore  # noqa: E402
+from analyst.plumbing.tracing import build_tracer  # noqa: E402
 
 DATA_DIR = "./data"
 OUTPUT_DIR = "./output"

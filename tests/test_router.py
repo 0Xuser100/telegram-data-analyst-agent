@@ -292,7 +292,7 @@ def test_resume_uses_the_current_conversation(router, graph, threads):
 
 def test_every_command_maps_to_a_method(router):
     """A typo in the table would otherwise only show up when someone types it."""
-    from router import UpdateRouter
+    from analyst.conversation.router import UpdateRouter
 
     for command, method in UpdateRouter.COMMANDS.items():
         assert command.startswith("/")

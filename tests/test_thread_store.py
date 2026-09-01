@@ -8,7 +8,7 @@ import threading
 
 import pytest
 
-from thread_store import ThreadStore
+from analyst.plumbing.thread_store import ThreadStore
 
 
 @pytest.fixture

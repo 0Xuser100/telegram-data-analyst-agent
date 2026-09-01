@@ -9,8 +9,8 @@ from contextlib import nullcontext
 
 from langgraph.types import Command
 
-from approvals import PendingAction, pending_actions
-from progress import Progress, SilentProgress
+from analyst.agent.pending import PendingAction, pending_actions
+from analyst.plumbing.progress import Progress, SilentProgress
 
 # How long a run may take before it announces itself. A greeting comes back in
 # about a second, and announcing first turned every reply into two messages.

@@ -5,7 +5,7 @@ import time
 
 import pytest
 
-from artifacts import ArtifactCollector
+from analyst.plumbing.artifacts import ArtifactCollector
 
 CHAT = 555
 

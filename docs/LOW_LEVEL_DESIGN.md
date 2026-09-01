@@ -13,22 +13,23 @@ easy to get wrong. Signatures are current as of the code in this folder.
 | Module | Lines | Exposes |
 |---|---|---|
 | [`config.py`](#configpy) | 55 | `Settings`, `get_settings`, `apply_tracing_env` |
-| [`prompts.py`](#promptspy) | 155 | `SYSTEM_RULES`, `UPLOADED_FILE_TASK`, `ANALYSIS_PROMPT` |
-| [`backend.py`](#backendpy) | 56 | `create_backend`, `ensure_sample_data`, `backend` |
-| [`agent.py`](#agentpy) | 100 | `build_model`, `build_checkpointer`, `build_summarizer`, `build_agent`, `thread_config` |
-| [`runner.py`](#runnerpy) | 114 | `AgentRunner`, `run_to_completion`, `TooManyApprovals` |
-| [`approvals.py`](#approvalspy) | 225 | `PendingAction`, `Card`, `describes`, `describe`, `pending_actions`, `TelegramApprover`, `ConsoleApprover` |
-| [`artifacts.py`](#artifactspy) | 91 | `ArtifactCollector`, `mentioned_paths` |
-| [`delivery.py`](#deliverypy) | 72 | `ResultDelivery`, `final_text` |
-| [`router.py`](#routerpy) | 212 | `UpdateRouter` |
-| [`progress.py`](#progresspy) | 36 | `Progress`, `SilentProgress`, `ChatProgress` |
-| [`formatting.py`](#formattingpy) | 96 | `to_html`, `chunk_text`, `human_size`, `tidy_path`, `shorten_interpreter`, `safe_filename` |
-| [`telegram_client.py`](#telegram_clientpy) | 147 | `TelegramClient`, `TelegramError` |
-| [`retrying_client.py`](#retrying_clientpy) | 56 | `RetryingClient` |
-| [`thread_store.py`](#thread_storepy) | 56 | `ThreadStore` |
-| [`tracing.py`](#tracingpy) | 168 | `TaskTracer`, `TraceStore`, `NullTracer`, `build_tracer` |
-| [`telegram_bot.py`](#telegram_botpy) | 132 | `Bot`, `build_bot`, `PollingLoop`, `main` |
-| [`main.py`](#mainpy) | 61 | `run_analysis`, `main` |
+| [`agent/prompts.py`](#agentpromptspy) | 155 | `SYSTEM_RULES`, `UPLOADED_FILE_TASK`, `ANALYSIS_PROMPT` |
+| [`plumbing/backend.py`](#plumbingbackendpy) | 56 | `create_backend`, `ensure_sample_data`, `backend` |
+| [`agent/builder.py`](#agentbuilderpy) | 100 | `build_model`, `build_checkpointer`, `build_summarizer`, `build_agent`, `thread_config` |
+| [`agent/runner.py`](#agentrunnerpy) | 114 | `AgentRunner`, `run_to_completion`, `TooManyApprovals` |
+| [`agent/pending.py`](#agentpendingpy) | 62 | `PendingAction`, `pending_actions`, `actions_in`, `decisions_for` |
+| [`conversation/approvals.py`](#conversationapprovalspy) | 188 | `Card`, `describes`, `describe`, `raw_args`, `TelegramApprover`, `ConsoleApprover` |
+| [`plumbing/artifacts.py`](#plumbingartifactspy) | 91 | `ArtifactCollector`, `mentioned_paths` |
+| [`conversation/delivery.py`](#conversationdeliverypy) | 72 | `ResultDelivery`, `final_text` |
+| [`conversation/router.py`](#conversationrouterpy) | 212 | `UpdateRouter` |
+| [`plumbing/progress.py`](#plumbingprogresspy) | 36 | `Progress`, `SilentProgress`, `ChatProgress` |
+| [`plumbing/formatting.py`](#plumbingformattingpy) | 96 | `to_html`, `chunk_text`, `human_size`, `tidy_path`, `shorten_interpreter`, `safe_filename` |
+| [`plumbing/telegram_client.py`](#plumbingtelegram_clientpy) | 147 | `TelegramClient`, `TelegramError` |
+| [`plumbing/retrying_client.py`](#plumbingretrying_clientpy) | 56 | `RetryingClient` |
+| [`plumbing/thread_store.py`](#plumbingthread_storepy) | 56 | `ThreadStore` |
+| [`plumbing/tracing.py`](#plumbingtracingpy) | 168 | `TaskTracer`, `TraceStore`, `NullTracer`, `build_tracer` |
+| [`entrypoints/bot.py`](#entrypointsbotpy) | 132 | `Bot`, `build_bot`, `PollingLoop`, `main` |
+| [`entrypoints/cli.py`](#entrypointsclipy) | 61 | `run_analysis`, `main` |
 
 ---
 
@@ -59,7 +60,7 @@ apply_tracing_env(settings=None) -> None
   only reads the environment. Both entry points call this **before** importing
   the graph.
 
-## prompts.py
+## agent/prompts.py
 
 Three strings. This is where behaviour lives — changing them changes what the
 agent does far more than changing code.
@@ -68,7 +69,7 @@ agent does far more than changing code.
 |---|---|---|
 | `SYSTEM_RULES` | both entry points, via `agent.build_agent` | `{python_path}`, `{output_dir}` |
 | `UPLOADED_FILE_TASK` | a Telegram upload with no caption | `{file_path}`, `{output_dir}` |
-| `ANALYSIS_PROMPT` | `main.py` (a `ChatPromptTemplate`) | `{data_path}`, `{python_path}`, `{output_dir}`, `{plot_name}` |
+| `ANALYSIS_PROMPT` | `entrypoints/cli.py` (a `ChatPromptTemplate`) | `{data_path}`, `{python_path}`, `{output_dir}`, `{plot_name}` |
 
 `SYSTEM_RULES` sections, in order: execution rules · scope · looking at the data
 · output location · choosing the chart · never claim unverified work · answering.
@@ -85,7 +86,7 @@ Rules with a scar behind them:
 - **No `plt.show()`** — it blocks forever headless.
 - **The reply never names a file** — the chart is attached automatically.
 
-## backend.py
+## plumbing/backend.py
 
 ```python
 create_backend(root_dir=".") -> LocalShellBackend
@@ -102,7 +103,7 @@ can write a script but never run it.
 `backend` is built at import time. A test that changes the working directory must
 build its own (`ensure_sample_data(create_backend())`).
 
-## agent.py
+## agent/builder.py
 
 ```python
 build_model(settings=None) -> ChatOpenAI
@@ -136,7 +137,7 @@ model, checkpointer, summarizer, agent      # the app's defaults
   factory normally configures.
 - **Read-only tools are not gated**, or every run becomes button-tapping.
 
-## runner.py
+## agent/runner.py
 
 ```python
 ANNOUNCE_AFTER = 4.0
@@ -172,11 +173,17 @@ an approval survive a restart.
 `run_to_completion` is the loop both front-ends use: start, `approver.ask(...)`,
 `resume(approver.decisions)`, repeat, `TooManyApprovals` after `max_rounds`.
 
-## approvals.py
+## agent/pending.py
+
+What the agent stopped on, as data. No front-end: a `PendingAction` says which
+tool wants to run and with which arguments, never how a human is asked.
+
+This is the agent layer because a paused run is agent state. It used to live in
+`conversation/approvals.py`, which made `runner` import upward — the one place
+the layer rule was broken before `tests/test_layers.py` existed.
 
 ```python
 SUPPORTED_DECISIONS = ("approve", "reject")     # edit/respond need a conversation
-DETAILS_ACTION = "details"                      # 🔍 — not a decision
 REJECT_MESSAGE = "User rejected this action. Do not retry it."
 
 @dataclass(frozen=True)
@@ -185,6 +192,22 @@ class PendingAction:
     args: dict = {}
     allowed_decisions: tuple[str, ...] = SUPPORTED_DECISIONS
     offered_decisions -> tuple[str, ...]        # filtered, never empty
+
+pending_actions(interrupts) -> list[PendingAction]   # flatten the interrupt
+actions_in(result) -> list[PendingAction]            # what an invoke waits on
+decisions_for(choice, count) -> list[dict]           # the resume payload
+```
+
+`decisions_for` builds one decision per pending action, in order: LangGraph
+resumes with a list, and a mismatched length silently drops an approval.
+
+## conversation/approvals.py
+
+The card and the question. Imports its data types from `agent/pending.py` and
+re-exports them, so a front-end has one import site for anything approval-shaped.
+
+```python
+DETAILS_ACTION = "details"                      # 🔍 — not a decision
 
 @dataclass(frozen=True)
 class Card:
@@ -195,8 +218,6 @@ class Card:
 DESCRIBERS: dict[str, Callable[[PendingAction], Card]]
 describes(*tool_names)                          # decorator, registers a describer
 describe(action) -> Card                        # unknown tools -> generic card
-pending_actions(interrupts) -> list[PendingAction]
-actions_in(result) -> list[PendingAction]
 raw_args(args, limit=3200) -> str
 decisions_for(choice, count) -> list[dict]
 
@@ -218,7 +239,7 @@ Every value goes through `html.escape`: tool args are model output and must not
 be able to inject markup. `ConsoleApprover` resets `decisions` at the start of
 each `ask`, so a second round cannot resend the first round's answers.
 
-## artifacts.py
+## plumbing/artifacts.py
 
 ```python
 IMAGE_EXT = (".png", ".jpg", ".jpeg", ".webp", ".gif")
@@ -243,7 +264,7 @@ class ArtifactCollector:
   exist, or a chart described when nothing was produced (both a chart word *and*
   a made word must match, so "no chart was created" does not trip it).
 
-## delivery.py
+## conversation/delivery.py
 
 ```python
 final_text(result) -> str                       # the last non-empty AI message
@@ -262,7 +283,7 @@ is dozens of messages and only the last answer is relayed. Photos are sent with
 picture would put that noise back. A failed upload is reported but never loses
 the text that already arrived.
 
-## router.py
+## conversation/router.py
 
 ```python
 class UpdateRouter:
@@ -301,7 +322,7 @@ or failed upload must not burn a conversation.
 do), reject unknown callback data, report a stale card, handle 🔍 without
 resuming, then announce the decision and resume.
 
-## progress.py
+## plumbing/progress.py
 
 ```python
 class Progress(Protocol):  busy(); note(message)
@@ -309,9 +330,9 @@ class SilentProgress:      # does nothing — the terminal shows its own prompts
 class ChatProgress:        # busy -> send_typing, note -> send_message
 ```
 
-Three tiny classes so `runner.py` never imports a Telegram client.
+Three tiny classes so `agent/runner.py` never imports a Telegram client.
 
-## formatting.py
+## plumbing/formatting.py
 
 ```python
 MAX_MESSAGE = 3900          # 4096 minus room for our own markers
@@ -337,7 +358,7 @@ safe_filename(name) -> str
 - `safe_filename` strips every path component: `../../secret.json` must not
   escape `data/`. Truncated to 80 characters.
 
-## telegram_client.py
+## plumbing/telegram_client.py
 
 ```python
 PHOTO_MAX_BYTES = 10 * 1024 * 1024
@@ -368,7 +389,7 @@ class TelegramClient:
 - `download_file` fetches from the `/file/` host, a different base URL from the
   method endpoints. Bots may download at most 20 MB.
 
-## retrying_client.py
+## plumbing/retrying_client.py
 
 ```python
 TRANSIENT = (ConnectionError, Timeout, ChunkedEncodingError)
@@ -385,7 +406,7 @@ Backoff grows (`backoff * attempt`). A `TelegramError` is a rejected request, no
 a network fault, so it is not retried. `get_updates` is not retried either: the
 polling loop already loops.
 
-## thread_store.py
+## plumbing/thread_store.py
 
 ```python
 class ThreadStore:
@@ -405,7 +426,7 @@ owns, so sharing it would be racing. `check_same_thread=False` with a
 threads created before this table existed stay reachable — including one holding
 a pending approval.
 
-## tracing.py
+## plumbing/tracing.py
 
 ```python
 class NullTracer:                 # every method a no-op; used when tracing is off
@@ -448,7 +469,7 @@ CREATE TABLE thread_traces (thread_id TEXT PRIMARY KEY,
                             run_id TEXT NOT NULL, headers TEXT NOT NULL)
 ```
 
-## telegram_bot.py
+## entrypoints/bot.py
 
 ```python
 class PollingLoop:
@@ -475,7 +496,7 @@ logged and polling continues; a handler error is logged with a traceback and the
 chat is told, unless it is not on the allowlist — even the failure notice must
 not confirm the bot exists.
 
-## main.py
+## entrypoints/cli.py
 
 ```python
 DATA_FILE = "./data/sales_data.csv"

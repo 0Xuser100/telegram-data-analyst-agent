@@ -148,11 +148,11 @@ def test_a_restart_mid_approval_keeps_the_button_working(router, client, graph, 
     router.handle_message(text_update("analyse this"))
 
     # A "restart": the router and delivery are rebuilt, the store is not.
-    from delivery import ResultDelivery
-    from artifacts import ArtifactCollector
-    from router import UpdateRouter
-    from runner import AgentRunner
-    from prompts import UPLOADED_FILE_TASK
+    from analyst.conversation.delivery import ResultDelivery
+    from analyst.plumbing.artifacts import ArtifactCollector
+    from analyst.conversation.router import UpdateRouter
+    from analyst.agent.runner import AgentRunner
+    from analyst.agent.prompts import UPLOADED_FILE_TASK
 
     rebuilt = UpdateRouter(
         client=client,

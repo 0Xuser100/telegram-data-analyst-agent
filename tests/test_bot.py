@@ -6,7 +6,7 @@ does not know: a crash here takes the bot offline with approvals still pending.
 
 import pytest
 
-import telegram_bot as bot
+from analyst.entrypoints import bot
 from conftest import ALLOWED_CHAT, BLOCKED_CHAT
 
 

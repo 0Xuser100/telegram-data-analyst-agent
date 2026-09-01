@@ -1,6 +1,6 @@
 # Testing
 
-Two parts: **how pytest works**, then **how this project's 418 tests are put
+Two parts: **how pytest works**, then **how this project's 442 tests are put
 together**. If you have never used pytest, read part 1 first — everything in
 part 2 is built out of those few ideas.
 
@@ -222,11 +222,12 @@ test — but changing the working directory that early would break pytest's own
 
 ## What is tested
 
-One file per module, 17 files.
+One file per module, plus one for the layer rule: 18 files.
 
 | File | Tests | What it covers |
 |---|---|---|
 | `test_formatting.py` | 58 | Markdown → HTML, splitting, sizes, paths, safe filenames |
+| `test_layers.py` | 24 | Every import in every module: nothing may point at a higher layer |
 | `test_prompts.py` | 53 | The rules: inspect-don't-read, reply format, chart menu, no unverified claims |
 | `test_router.py` | 57 | What each message, file and button does; the command table; the trace lifecycle |
 | `test_approvals.py` | 43 | A card per tool, the button rows, both approvers, the registry |
@@ -244,7 +245,7 @@ One file per module, 17 files.
 | `test_integration_flow.py` | 10 | Whole conversations: upload → approve → approve → chart |
 | `test_backend.py` | 6 | The shell workspace and the sample CSV |
 
-418 in total, from 324 test functions — `parametrize` accounts for the rest.
+442 in total, from 326 test functions — `parametrize` accounts for the rest.
 
 Coverage: 99% of the project's lines.
 
@@ -323,7 +324,7 @@ forbids inline `python -c`), a real PNG was saved, the reply contains the true
 total of 840, the reply opens with what the data is, and there are no file paths
 in it. Ten tests, about 40 seconds, a few cents.
 
-It drives `runner.run_to_completion` — the same loop `main.py` uses — with an
+It drives `runner.run_to_completion` — the same loop `entrypoints/cli.py` uses — with an
 approver that always says yes. That is the one thing it does which a real user
 would not.
 

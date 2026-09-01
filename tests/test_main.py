@@ -23,25 +23,25 @@ THREAD = "cli-thread"
 
 @pytest.fixture(scope="module")
 def cli():
-    import main
+    from analyst.entrypoints import cli as main
     return main
 
 
 @pytest.fixture
 def approver():
     """Approves everything, silently."""
-    from approvals import ConsoleApprover
+    from analyst.conversation.approvals import ConsoleApprover
     return ConsoleApprover(prompt=lambda _: "y", out=lambda *args: None)
 
 
 @pytest.fixture
 def rejecter():
-    from approvals import ConsoleApprover
+    from analyst.conversation.approvals import ConsoleApprover
     return ConsoleApprover(prompt=lambda _: "n", out=lambda *args: None)
 
 
 def runner_for(graph):
-    from runner import AgentRunner
+    from analyst.agent.runner import AgentRunner
     return AgentRunner(graph, announce_after=0)
 
 
@@ -146,7 +146,7 @@ def test_main_writes_the_sample_data_and_prints_the_answer(cli, monkeypatch, cap
     monkeypatch.setattr(cli, "agent", graph)
     monkeypatch.setattr(cli, "ensure_sample_data", lambda: written.append(True))
     monkeypatch.setattr(cli, "ConsoleApprover",
-                        lambda: __import__("approvals").ConsoleApprover(
+                        lambda: __import__("analyst.conversation.approvals", fromlist=["ConsoleApprover"]).ConsoleApprover(
                             prompt=lambda _: "y", out=lambda *a: None))
 
     cli.main()

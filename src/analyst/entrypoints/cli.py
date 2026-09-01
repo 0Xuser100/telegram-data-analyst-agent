@@ -1,23 +1,23 @@
 """Terminal front-end: one analysis run, approvals typed at the prompt.
 
-Run with:  uv run main.py
+Run with:  uv run analyst-cli  (from the repository root)
 """
 
 import sys
 
-from config import apply_tracing_env, get_settings
+from analyst.config import apply_tracing_env, get_settings
 
 settings = get_settings()
 apply_tracing_env(settings)          # before the graph is imported
 
 from langchain_core.utils.uuid import uuid7  # noqa: E402
 
-from agent import OUTPUT_DIR, agent  # noqa: E402
-from approvals import ConsoleApprover  # noqa: E402
-from backend import ensure_sample_data  # noqa: E402
-from delivery import final_text  # noqa: E402
-from prompts import ANALYSIS_PROMPT  # noqa: E402
-from runner import AgentRunner, TooManyApprovals, run_to_completion  # noqa: E402
+from analyst.agent.builder import OUTPUT_DIR, agent  # noqa: E402
+from analyst.conversation.approvals import ConsoleApprover  # noqa: E402
+from analyst.plumbing.backend import ensure_sample_data  # noqa: E402
+from analyst.conversation.delivery import final_text  # noqa: E402
+from analyst.agent.prompts import ANALYSIS_PROMPT  # noqa: E402
+from analyst.agent.runner import AgentRunner, TooManyApprovals, run_to_completion  # noqa: E402
 
 DATA_FILE = "./data/sales_data.csv"
 PLOT_NAME = "sales_plot.png"
