@@ -1,0 +1,35 @@
+[project]
+name = "telegram-data-analyst-agent"
+version = "0.1.0"
+description = "An autonomous data analysis agent built with Deep Agents"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "deepagents>=0.7.5",
+    "langchain-openai>=1.6.0",
+    "langgraph-checkpoint-sqlite>=3.1.1",
+    "langsmith[sandbox]>=0.10.18",
+    "matplotlib>=3.11.1",
+    "pandas>=3.0.5",
+    "pydantic-settings>=2.15.0",
+    "requests>=2.34.2",
+    "seaborn>=0.13.2",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# The project is a flat package-less layout, and tests/ is on the path too so
+# `from conftest import ...` works for the shared builders.
+pythonpath = [".", "tests"]
+addopts = "-q --strict-markers"
+markers = [
+    "slow: builds the whole deep agent graph (a few seconds, still offline)",
+]
+# tests_e2e/ is not in testpaths on purpose: it calls the real API and costs
+# money. Run it with:  RUN_E2E=1 uv run pytest tests_e2e -v -s
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+]
