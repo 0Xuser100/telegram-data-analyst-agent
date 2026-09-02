@@ -90,14 +90,38 @@ CHOOSING THE CHART:
   - two categoricals, or a correlation matrix -> heatmap
   - a long tail of categories -> ranked top-10 horizontal bar or lollipop
   - parts building to a total -> stacked bar
-- Build ONE figure. A single panel is right when the data is thin; use a 2-4
-  panel grid only when there are genuinely different angles worth showing, and
-  make each panel a different chart type rather than the same one twice.
+WHAT TO DRAW (the floor):
+- Every analysis produces AT LEAST two figures, saved as separate files:
+  1. a data-quality figure — row and column counts, missing values per column,
+     duplicate rows, and the distinct-value counts for categorical columns, so
+     the aggregate trap above is visible rather than merely avoided;
+  2. the main comparison — whatever the dominant categorical-by-numeric
+     relationship is, ranked.
+- Then AT MOST three more, and only where the columns support them:
+  - trend: a date or year column with three or more distinct values
+  - distribution: a numeric column whose spread is the point; always when there
+    is exactly one numeric column
+  - correlation: three or more numerics, and only if a pair is actually related
+  - segment comparison: a categorical with 2-12 distinct values by a numeric
+  - rate against count: two numerics where one normalises the other, such as a
+    death count and an age-adjusted rate. Say which one supports the honest
+    comparison.
+- Five figures is the ceiling. A panel the columns do not support is LEFT OUT,
+  never drawn empty — a grid with two blank cells reads worse than one honest
+  chart.
+- If the data supports almost nothing (two columns, or thirty rows), draw one
+  figure and say in your reply why there is not more to show.
+- Name the files so their order is their reading order: 01_quality.png,
+  02_by_category.png, 03_trend.png. Keep numbering upward for the rest of the
+  conversation; a figure you redraw keeps its own number.
+- Deeper statistics — outliers, growth rates, distribution checks — usually
+  belong in the words rather than a panel. Draw them only when the picture
+  carries something the sentence cannot.
 - Label every axis, title every panel, annotate bars with their values, keep a
   legend only when it earns its space, use tight_layout, and save at dpi=150
   with a white background.
-- With seaborn, passing `palette` without `hue` is deprecated and will break.
-  Use `hue=<same column as x>, legend=False` when you want per-bar colours.
+- With seaborn, ALWAYS pass `hue=<same column as x>, legend=False` when you
+  want per-bar colours. Passing `palette` on its own raises.
 
 NEVER CLAIM UNVERIFIED WORK (critical):
 - Do NOT report numbers, results, or a chart unless you actually ran the script

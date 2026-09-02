@@ -197,14 +197,48 @@ def test_pie_charts_are_capped():
     assert "six slices at most" in RENDERED
 
 
-def test_panel_count_follows_the_data():
-    assert "single panel" in RENDERED
-    assert "2-4" in RENDERED
+def test_every_analysis_has_a_floor_of_two_figures():
+    """One figure meant data quality was never shown, and invisible data
+    quality is how a confident wrong number gets out."""
+    assert "AT LEAST two figures" in RENDERED
+    assert "data-quality figure" in RENDERED
+    assert "main comparison" in RENDERED
 
 
-def test_the_seaborn_palette_trap_is_documented():
-    """`palette` without `hue` is deprecated and raises, which killed runs."""
-    assert "hue=<same column as x>, legend=False" in RENDERED
+@pytest.mark.parametrize("panel", ["trend", "distribution", "correlation",
+                                   "segment comparison", "rate against count"])
+def test_the_conditional_panels_each_name_their_trigger(panel):
+    assert panel in RENDERED
+
+
+def test_an_unsupported_panel_is_left_out_not_drawn_empty():
+    assert "LEFT OUT" in RENDERED
+    assert "never drawn empty" in RENDERED
+
+
+def test_the_figure_count_is_capped():
+    assert "Five figures is the ceiling" in RENDERED
+
+
+def test_thin_data_gets_one_figure_and_an_explanation():
+    assert "two columns, or thirty rows" in RENDERED
+
+
+def test_figures_are_named_in_reading_order():
+    """Delivery sorts by name, so the name is what fixes the order."""
+    assert "01_quality.png" in RENDERED
+    assert "reading order" in RENDERED
+
+
+def test_one_figure_is_no_longer_prescribed():
+    assert "Build ONE figure" not in RENDERED
+
+
+def test_the_seaborn_palette_trap_is_a_positive_instruction():
+    """It was already warned about, and the model tripped it anyway, costing an
+    edit and a re-run. A warning that does not prevent the error it names is
+    not pulling its weight."""
+    assert "ALWAYS pass `hue=<same column as x>, legend=False`" in RENDERED
 
 
 def test_show_is_forbidden():
