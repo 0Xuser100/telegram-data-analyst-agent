@@ -23,7 +23,16 @@ def test_build_model_uses_the_configured_model(mod):
     from langchain_openai import ChatOpenAI
     model = mod.build_model()
     assert isinstance(model, ChatOpenAI)
-    assert model.model_name == "gpt-4.1-mini-2025-04-14"
+    assert model.model_name == "gpt-5.6-luna"
+
+
+def test_the_model_is_reached_through_the_responses_api(mod):
+    """gpt-5.x rejects function tools on /v1/chat/completions while a
+    reasoning effort is in play, and langchain-openai sends that key whatever
+    we do. The Responses API is the fix that keeps reasoning switched on;
+    reasoning_effort="none" also clears the error but by disabling the
+    reasoning we changed model for."""
+    assert mod.build_model().use_responses_api is True
 
 
 def test_the_key_is_passed_explicitly(mod):
@@ -50,7 +59,7 @@ def test_build_summarizer_compacts_at_40k(mod):
     expensive, not until it was compacted."""
     summarizer = mod.build_summarizer(mod.model)
     assert summarizer._lc_helper.trigger == ("tokens", 40_000)
-    assert summarizer._lc_helper.keep == ("messages", 6)
+    assert summarizer._lc_helper.keep == ("messages", 16)
 
 
 def test_tool_arg_clipping_is_preserved(mod):
@@ -142,6 +151,39 @@ def test_reads_are_not_gated(mod):
 
 
 # --------------------------------------------------------------------------
+# run bounds
+# --------------------------------------------------------------------------
+
+def test_the_plan_is_kept_visible(stack):
+    """Compaction evicts the tool result the plan arrives in, so it has to be
+    re-attached to the prompt or a long run loses its way."""
+    assert "PlanVisibilityMiddleware" in [m.name for m in stack]
+
+
+def test_a_run_is_bounded_by_model_calls(stack):
+    """Nothing bounded a run before: deepagents sets recursion_limit to 9_999,
+    and the CLI's own cap is not on the bot's path at all."""
+    limiter = next(m for m in stack if m.name == "ModelCallLimitMiddleware")
+    assert limiter.run_limit == 40
+    assert limiter.thread_limit is None         # follow-ups share a thread
+
+
+def test_repeated_execution_is_bounded_separately(stack):
+    """A script that keeps failing must not eat the whole model-call budget."""
+    limiter = next(m for m in stack
+                   if m.name.startswith("ToolCallLimitMiddleware"))
+    assert limiter.run_limit == 15
+    assert limiter.thread_limit is None
+
+
+def test_a_bounded_run_answers_instead_of_raising(stack):
+    """The measured run that would have been killed by the old cap produced
+    the correct analysis, so a bound must return what it has."""
+    limiter = next(m for m in stack if m.name == "ModelCallLimitMiddleware")
+    assert limiter.exit_behavior == "end"
+
+
+# --------------------------------------------------------------------------
 # the app defaults
 # --------------------------------------------------------------------------
 
@@ -149,3 +191,12 @@ def test_the_module_exposes_a_ready_agent(mod):
     assert mod.agent is not None
     assert mod.model is not None
     assert mod.checkpointer is not None
+
+
+def test_destructive_and_delegating_tools_always_ask(mod):
+    """The backend exposes `delete` and `task` as well as the write tools.
+    Neither is ever routine: an analysis has no reason to remove a file, and
+    losing the user's data is not fixed by re-running."""
+    rules = mod.build_interrupt_on(auto_approve=True)
+    assert rules["delete"] is True
+    assert rules["task"] is True

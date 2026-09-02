@@ -12,12 +12,23 @@ from deepagents.middleware.summarization import (
     SummarizationMiddleware,
     compute_summarization_defaults,
 )
-from langchain.agents.middleware import TodoListMiddleware
+from langchain.agents.middleware import (
+    InterruptOnConfig,
+    ModelCallLimitMiddleware,
+    TodoListMiddleware,
+    ToolCallLimitMiddleware,
+)
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.sqlite import SqliteSaver
 
 from analyst.plumbing.backend import backend
 from analyst.config import get_settings
+from analyst.agent.plan_visibility import PlanVisibilityMiddleware
+from analyst.agent.policy import (
+    is_routine_execute,
+    is_routine_write,
+    is_sensitive_read,
+)
 from analyst.agent.prompts import SYSTEM_RULES
 
 CHECKPOINT_DB = "checkpoints.sqlite"
@@ -27,23 +38,99 @@ OUTPUT_DIR = "./output"
 # never fires at ~40k per turn: the conversation just grew until it was
 # expensive. Evicted messages are written to conversation_history/ first.
 COMPACT_AT_TOKENS = 40_000
-KEEP_MESSAGES = 6
+# Six messages is roughly two tool round-trips, which was plenty when a run was
+# two. A measured analysis makes 29 tool calls, and at six the model can no
+# longer see what its own last script printed. The token trigger stays where it
+# is: raising that reopens the cost problem it was set to fix.
+KEEP_MESSAGES = 16
+
+# What bounds one run. Nothing did before: deepagents sets recursion_limit to
+# 9_999, and the CLI's own round cap never sat on the bot's path. A measured
+# single-pass analysis on this model takes 15 approval rounds and 29 tool
+# calls, so these leave real headroom and only a stuck agent reaches them.
+# Both are per-run, never per-thread: follow-up questions share a thread, and
+# a thread-scoped budget would strangle a long conversation.
+MODEL_CALLS_PER_RUN = 40
+EXECUTIONS_PER_RUN = 15
 
 # Which tools stop and ask. Read-only tools do not, or every run turns into a
 # button-tapping session.
+#
+# `FilesystemPermission` would have owned path containment, but deepagents
+# refuses `permissions` alongside a backend that can execute commands -- which
+# is the only backend this app can use. So every rule below is a `when`
+# predicate from agent/policy.py, and containment is ours to get right.
 INTERRUPT_ON = {
     "execute": True,       # pause before running commands
     "write_file": True,    # pause before writing files
+    "edit_file": True,     # an edit is a write
+    # Never routine, and never auto-approved: the backend exposes `delete`, an
+    # analysis has no reason to remove anything, and losing the user's data
+    # file is not recoverable by re-running. `task` spawns a sub-agent, which
+    # the prompt forbids -- the tool is still there, so gate it too.
+    "delete": True,
+    "task": True,
     "read_file": False,    # no pause
     "ls": False,           # no pause
 }
+
+
+def _asks_unless(predicate):
+    """An approval rule that stays out of the way while `predicate` holds.
+
+    A `when` returning False keeps the call out of the interrupt batch
+    entirely, so the reviewer only sees what actually needs a decision.
+    """
+    return InterruptOnConfig(
+        allowed_decisions=["approve", "reject"],
+        when=lambda request: not predicate(request),
+    )
+
+
+def build_interrupt_on(auto_approve: bool = True,
+                       python_path: str = sys.executable,
+                       output_dir: str = OUTPUT_DIR) -> dict:
+    """Approval rules for the graph.
+
+    With auto-approval off, every write and every command asks, as before --
+    except that reads of the credentials file still raise a card, which they
+    never did.
+    """
+    rules = {**INTERRUPT_ON, "read_file": _asks_unless(
+        lambda request: not is_sensitive_read(request))}
+    if not auto_approve:
+        return rules
+    # Bound to the same interpreter and directory the prompt tells the agent
+    # to use. Left at their defaults these reject every legitimate call, and
+    # auto-approval silently reverts to a card on every step.
+    return {
+        **rules,
+        "execute": _asks_unless(
+            lambda request: is_routine_execute(request, python_path, output_dir)),
+        "write_file": _asks_unless(
+            lambda request: is_routine_write(request, output_dir)),
+        "edit_file": _asks_unless(
+            lambda request: is_routine_write(request, output_dir)),
+    }
+
+
+
 
 
 def build_model(settings=None) -> ChatOpenAI:
     """The key is passed explicitly: pydantic-settings reads .env without
     exporting to os.environ, so ChatOpenAI's own lookup would miss it."""
     settings = settings or get_settings()
-    return ChatOpenAI(model=settings.OPENAI_MODEL, api_key=settings.OPENAI_API_KEY)
+    return ChatOpenAI(
+        model=settings.OPENAI_MODEL,
+        api_key=settings.OPENAI_API_KEY,
+        # gpt-5.x refuses function tools on /v1/chat/completions whenever a
+        # reasoning effort is in play, and langchain-openai sends that key
+        # whatever we pass. Without this the first tool call fails outright.
+        # reasoning_effort="none" silences it too, by switching off the
+        # reasoning we changed model for — so: the Responses API.
+        use_responses_api=True,
+    )
 
 
 def build_checkpointer(db_path: str = CHECKPOINT_DB) -> SqliteSaver:
@@ -70,19 +157,37 @@ def build_summarizer(model, target_backend=None) -> SummarizationMiddleware:
 
 
 def build_agent(model=None, checkpointer=None, target_backend=None, summarizer=None,
-                python_path: str = sys.executable, output_dir: str = OUTPUT_DIR):
+                python_path: str = sys.executable, output_dir: str = OUTPUT_DIR,
+                auto_approve: bool | None = None):
     """The compiled graph. Execution rules live in the system prompt, so they
     apply to any free-form task arriving from Telegram."""
     model = model or build_model()
     target_backend = target_backend or backend
+    if auto_approve is None:
+        auto_approve = get_settings().ANALYST_AUTO_APPROVE
     return create_deep_agent(
         model=model,
         tools=[],
         backend=target_backend,
         checkpointer=checkpointer if checkpointer is not None else build_checkpointer(),
         system_prompt=SYSTEM_RULES.format(python_path=python_path, output_dir=output_dir),
-        interrupt_on=INTERRUPT_ON,
+        interrupt_on=build_interrupt_on(auto_approve, python_path, output_dir),
         middleware=[TodoListMiddleware(),
+                    # The plan reaches the model only as a tool result, which
+                    # compaction evicts mid-run. Without this the agent forgets
+                    # what it set out to do.
+                    PlanVisibilityMiddleware(),
+                    # `end` rather than `error`: the measured run that the old
+                    # cap would have killed had produced the right analysis.
+                    # A bounded run answers with what it has.
+                    ModelCallLimitMiddleware(run_limit=MODEL_CALLS_PER_RUN,
+                                             exit_behavior="end"),
+                    # `continue` feeds "do not call execute again" back to the
+                    # model, so a script stuck in fix-rerun-fail stops burning
+                    # the budget without losing the run.
+                    ToolCallLimitMiddleware(tool_name="execute",
+                                            run_limit=EXECUTIONS_PER_RUN,
+                                            exit_behavior="continue"),
                     summarizer or build_summarizer(model, target_backend)],
     )
 

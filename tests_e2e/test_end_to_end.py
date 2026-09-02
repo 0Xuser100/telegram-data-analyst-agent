@@ -48,7 +48,7 @@ def test_the_configured_model_is_used(live_agent):
 
 def test_compaction_is_set_for_this_model(live_agent):
     assert live_agent.summarizer._lc_helper.trigger == ("tokens", 40_000)
-    assert live_agent.summarizer._lc_helper.keep == ("messages", 6)
+    assert live_agent.summarizer._lc_helper.keep == ("messages", 16)
 
 
 # --------------------------------------------------------------------------

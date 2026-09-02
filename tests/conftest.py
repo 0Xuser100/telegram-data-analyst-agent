@@ -18,7 +18,7 @@ os.environ.update({
     "LANGSMITH_API_KEY": "lsv2_pt_test",
     "LANGSMITH_PROJECT": "test-project",
     "OPENAI_API_KEY": "sk-test-not-a-real-key",
-    "OPENAI_MODEL": "gpt-4.1-mini-2025-04-14",
+    "OPENAI_MODEL": "gpt-5.6-luna",
     "TELEGRAM_BOT_TOKEN": "123456:TEST-token",
     "TELEGRAM_ALLOWED_CHAT_IDS": "555,777",
     "TELEGRAM_POLL_TIMEOUT": "1",
@@ -67,8 +67,11 @@ class FakeTask:
 
 
 class FakeState:
-    def __init__(self, tasks):
+    def __init__(self, tasks, values=None):
         self.tasks = tuple(tasks)
+        # The real StateSnapshot exposes the graph state here; `todos` is what
+        # the progress reporter reads to say what the run is working on.
+        self.values = values or {}
 
 
 class FakeAgent:
@@ -83,6 +86,7 @@ class FakeAgent:
         self.invocations: list[tuple] = []
         self.delay: float = 0.0
         self.error: BaseException | None = None
+        self.todos: list[dict] = []
         # Per thread, like the real checkpointer: a new conversation must not
         # inherit the interrupt another one is paused on.
         self._paused: dict[str | None, list] = {}
@@ -105,7 +109,8 @@ class FakeAgent:
     def get_state(self, config):
         thread = self._thread_of(config)
         interrupts = self._paused[thread] if thread in self._paused             else self._paused.get(None, [])
-        return FakeState([FakeTask(interrupts)] if interrupts else [])
+        return FakeState([FakeTask(interrupts)] if interrupts else [],
+                         values={"todos": self.todos})
 
     @property
     def pending(self) -> list:
@@ -133,12 +138,14 @@ class FakeClient:
         self.messages: list[tuple[int, str]] = []
         self.html: list[tuple[int, str, list | None]] = []
         self.photos: list[tuple[int, str]] = []
+        self.groups: list[tuple[int, list[str]]] = []
         self.documents: list[tuple[int, str]] = []
         self.typing: list[int] = []
         self.answered: list[str] = []
         self.downloads: list[tuple[str, str, str]] = []
         self.download_error: Exception | None = None
         self.photo_error: Exception | None = None
+        self.group_error: Exception | None = None
 
     def send_message(self, chat_id, text, markdown=True):
         self.messages.append((chat_id, text))
@@ -150,6 +157,11 @@ class FakeClient:
         if self.photo_error:
             raise self.photo_error
         self.photos.append((chat_id, path))
+
+    def send_media_group(self, chat_id, paths):
+        if self.group_error:
+            raise self.group_error
+        self.groups.append((chat_id, list(paths)))
 
     def send_document(self, chat_id, path, caption=None):
         self.documents.append((chat_id, path))
@@ -215,12 +227,20 @@ class FakeProgress:
     def __init__(self):
         self.busy_calls = 0
         self.notes: list[str] = []
+        self.steps: list[str] = []
+        self.finished = 0
 
     def busy(self) -> None:
         self.busy_calls += 1
 
     def note(self, message: str) -> None:
         self.notes.append(message)
+
+    def step(self, message: str) -> None:
+        self.steps.append(message)
+
+    def done(self) -> None:
+        self.finished += 1
 
 
 # --------------------------------------------------------------------------
@@ -280,7 +300,8 @@ def progress():
 def runner(graph, progress):
     from analyst.agent.runner import AgentRunner
     # 50ms rather than 4s: the tests assert on the announcement, not on waiting.
-    return AgentRunner(graph, progress=progress, announce_after=0.05)
+    return AgentRunner(graph, progress=progress, announce_after=0.05,
+                       step_every=0.01)
 
 
 @pytest.fixture

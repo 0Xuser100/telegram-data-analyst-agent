@@ -5,6 +5,7 @@ network faked. These are the tests that would have caught the reported bugs.
 import os
 
 import pytest
+from langchain_core.messages import AIMessage
 
 from conftest import (
     ALLOWED_CHAT,
@@ -121,14 +122,19 @@ def test_new_abandons_a_stuck_approval(router, client, graph):
     assert client.said("fresh start")
 
 
-def test_a_hallucinated_chart_is_called_out(router, client, graph, clean_output):
-    """The model sometimes describes a figure it never ran the script for.
-    Sending nothing at all would look like a bug in the bot."""
-    graph.results = [ai_result("**Revenue $840**\n\nA chart of the trend has been saved.")]
+def test_an_analysis_that_produced_no_chart_is_called_out(router, client, graph, clean_output):
+    """The model sometimes answers without ever running the script. Sending
+    nothing at all would look like a bug in the bot.
+
+    The check is structural rather than word-based: the reply voice no longer
+    says "saved" or "created", so looking for those words would miss this."""
+    reply = AIMessage("**Revenue $840**\n\nWidget A leads at 50.6%.")
+    reply.tool_calls = [{"name": "execute", "args": {}, "id": "1"}]
+    graph.results = [{"messages": [reply]}]
     router.handle_message(text_update("analyse the sales file"))
 
     assert client.photos == []
-    assert client.said("no image was produced")
+    assert client.said("produced no chart")
 
 
 # --------------------------------------------------------------------------

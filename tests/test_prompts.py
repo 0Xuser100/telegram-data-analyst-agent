@@ -11,6 +11,11 @@ from analyst.agent.prompts import ANALYSIS_PROMPT, SYSTEM_RULES, UPLOADED_FILE_T
 
 RENDERED = SYSTEM_RULES.format(python_path=sys.executable, output_dir="./output")
 
+# The prompt is hard-wrapped, so a phrase that reads as one line in the source
+# is split by a newline and two spaces. Assert against this when the phrase is
+# longer than a few words.
+FLAT = " ".join(RENDERED.split())
+
 
 # --------------------------------------------------------------------------
 # templates render
@@ -91,16 +96,42 @@ def test_saved_to_phrasing_is_banned():
 
 
 def test_numbered_section_headings_are_banned():
-    assert "1. Data Overview" in RENDERED
+    assert "no numbered section headings" in FLAT
 
 
-def test_a_headline_and_bullets_are_requested():
-    assert "bold line" in RENDERED
-    assert "bullets" in RENDERED
+def test_the_reply_sounds_like_a_colleague():
+    assert "like a colleague who just did the work" in FLAT
+    assert "no bullet lists" in RENDERED
+    assert "no emoji" in RENDERED
 
 
-def test_the_reply_length_is_bounded():
-    assert "900 characters" in RENDERED
+def test_the_main_finding_is_still_bold():
+    """One anchor survives the move away from a report format."""
+    assert "on its own line in bold" in FLAT
+
+
+def test_judgement_calls_belong_in_the_body():
+    """The sentence explaining what was filtered and why is what makes the
+    numbers trustworthy; a footnote is not where it goes."""
+    assert "judgement call" in RENDERED
+    assert "most valuable one you will write" in FLAT
+
+
+def test_a_quality_problem_becomes_the_headline():
+    assert "qualify the analysis, it is the headline" in FLAT
+
+
+def test_dull_data_may_be_called_dull():
+    assert "manufactured insight" in RENDERED
+
+
+def test_a_truncated_run_must_admit_it():
+    assert "limit stopped your run early" in FLAT
+
+
+def test_the_length_cap_is_gone():
+    assert "900 characters" not in RENDERED
+    assert "There is no length limit" in FLAT
 
 
 # --------------------------------------------------------------------------
@@ -123,13 +154,77 @@ def test_wide_files_get_a_narrower_summary():
     assert "transpose" in RENDERED.lower()
 
 
-def test_one_inspect_step_is_enough():
-    assert "One inspect step is enough" in RENDERED
+def test_the_agent_is_told_to_plan_and_revise():
+    """The planning tool has been wired in all along and the prompt never
+    mentioned it, so the agent worked one pass and stopped."""
+    assert "write_todos" in RENDERED
+    assert "REVISE that plan" in FLAT
+
+
+def test_the_loop_has_a_stop_condition():
+    """Without one an iterative agent circles until a bound kills it."""
+    assert "stop telling you anything new" in FLAT
+
+
+def test_findings_are_written_down_not_remembered():
+    """Compaction replaces the conversation; the filesystem survives it."""
+    assert "findings.md" in RENDERED
+    assert "compacted" in RENDERED
+
+
+def test_one_pass_is_no_longer_prescribed():
+    assert "One inspect step is enough" not in RENDERED
+
+
+def test_aggregates_must_be_looked_for_before_summing():
+    """The failure that started this: summing a file that mixes national
+    totals with per-state rows produced a figure three times too large,
+    reported with no hedge."""
+    assert "AGGREGATES HIDING IN THE DATA" in RENDERED
+    assert "before you sum" in RENDERED.lower()
+
+
+def test_the_inspect_step_counts_distinct_values():
+    """Distinct-value counts are how the aggregate row becomes visible."""
+    assert "number of distinct values in every categorical column" in FLAT
+
+
+def test_the_denominator_must_be_stated():
+    assert "which denominator" in RENDERED
+
+
+def test_paths_must_be_relative():
+    """The model infers the project root from the interpreter path and writes
+    absolute paths. The backend rejects them, and the approval predicate
+    refuses them, so every write raised a card and the run died."""
+    assert "ALWAYS use relative paths" in FLAT
+    assert "never infer one from the interpreter path" in FLAT
+
+
+def test_a_follow_up_reads_the_findings_file():
+    """Compaction has usually replaced the conversation by the time a
+    follow-up arrives, so the file is the reliable record."""
+    assert "Answer it from" in FLAT or "findings.md" in FLAT
+    assert "Do NOT re-read the data file" in FLAT
+
+
+def test_the_figure_floor_does_not_apply_to_a_follow_up():
+    """It earns trust in a first analysis; on every reply it is noise."""
+    assert "floor of figures does NOT apply to a follow-up" in FLAT
+
+
+def test_an_unknown_number_is_computed_not_inferred():
+    assert "Never infer it from what is already on screen" in FLAT
+
+
+def test_an_ambiguous_dataset_is_asked_about_not_guessed():
+    """An answer about the wrong file looks exactly like an answer about the
+    right one, so this is the one failure with no recovery."""
+    assert "Do not guess" in FLAT
 
 
 def test_the_answer_starts_with_what_the_data_is():
-    assert "what the data is" in RENDERED
-    assert "what one row represents" in RENDERED
+    assert "Open with what the data is" in FLAT
 
 
 # --------------------------------------------------------------------------
@@ -162,14 +257,48 @@ def test_pie_charts_are_capped():
     assert "six slices at most" in RENDERED
 
 
-def test_panel_count_follows_the_data():
-    assert "single panel" in RENDERED
-    assert "2-4" in RENDERED
+def test_every_analysis_has_a_floor_of_two_figures():
+    """One figure meant data quality was never shown, and invisible data
+    quality is how a confident wrong number gets out."""
+    assert "AT LEAST two figures" in FLAT
+    assert "data-quality figure" in RENDERED
+    assert "main comparison" in RENDERED
 
 
-def test_the_seaborn_palette_trap_is_documented():
-    """`palette` without `hue` is deprecated and raises, which killed runs."""
-    assert "hue=<same column as x>, legend=False" in RENDERED
+@pytest.mark.parametrize("panel", ["trend", "distribution", "correlation",
+                                   "segment comparison", "rate against count"])
+def test_the_conditional_panels_each_name_their_trigger(panel):
+    assert panel in RENDERED
+
+
+def test_an_unsupported_panel_is_left_out_not_drawn_empty():
+    assert "LEFT OUT" in RENDERED
+    assert "never drawn empty" in FLAT
+
+
+def test_the_figure_count_is_capped():
+    assert "Five figures is the ceiling" in FLAT
+
+
+def test_thin_data_gets_one_figure_and_an_explanation():
+    assert "two columns, or thirty rows" in FLAT
+
+
+def test_figures_are_named_in_reading_order():
+    """Delivery sorts by name, so the name is what fixes the order."""
+    assert "01_quality.png" in RENDERED
+    assert "reading order" in RENDERED
+
+
+def test_one_figure_is_no_longer_prescribed():
+    assert "Build ONE figure" not in RENDERED
+
+
+def test_the_seaborn_palette_trap_is_a_positive_instruction():
+    """It was already warned about, and the model tripped it anyway, costing an
+    edit and a re-run. A warning that does not prevent the error it names is
+    not pulling its weight."""
+    assert "ALWAYS pass `hue=<same column as x>, legend=False`" in FLAT
 
 
 def test_show_is_forbidden():

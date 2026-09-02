@@ -205,17 +205,26 @@ class UpdateRouter:
             chat_id, "Approved ✅" if choice == "approve" else "Rejected ❌")
         gated = ", ".join(action.name for action in actions)
         thread_id = self._thread_id(chat_id)
-        result = self._runner.resume(
-            thread_id,
-            decisions_for(choice, len(actions)),
-            notice="Still working…",
-            progress=self._progress_for(chat_id),
-            run_name=f"{choice}: {gated}",
-            metadata={"source": "button", "chat_id": chat_id,
-                      "decision": choice, "tools": gated},
-            attach=lambda: self._tracer.attached(thread_id),
-        )
-        self._deliver(chat_id, thread_id, result)
+        # One reporter for the whole turn: it owns the status message, so the
+        # object that wrote it has to be the object that clears it.
+        reporter = self._progress_for(chat_id)
+        try:
+            result = self._runner.resume(
+                thread_id,
+                decisions_for(choice, len(actions)),
+                notice="Still working…",
+                progress=reporter,
+                run_name=f"{choice}: {gated}",
+                metadata={"source": "button", "chat_id": chat_id,
+                          "decision": choice, "tools": gated},
+                attach=lambda: self._tracer.attached(thread_id),
+            )
+        except BaseException:
+            # The bot reports the failure. Without this the status line sits
+            # above it for good, since the next turn builds a fresh reporter.
+            self._clear(reporter)
+            raise
+        self._deliver(chat_id, thread_id, result, reporter)
 
     # -- internals ---------------------------------------------------------
 
@@ -233,16 +242,30 @@ class UpdateRouter:
         thread_id = self._thread_id(chat_id)
         self._delivery.start_run(chat_id)
         self._tracer.start(thread_id, run_name or "task", {"task": task})
-        result = self._runner.start(
-            thread_id, task,
-            progress=self._progress_for(chat_id),
-            run_name=run_name, metadata=metadata,
-            attach=lambda: self._tracer.attached(thread_id),
-            **kwargs)
-        self._deliver(chat_id, thread_id, result)
+        reporter = self._progress_for(chat_id)
+        try:
+            result = self._runner.start(
+                thread_id, task,
+                progress=reporter,
+                run_name=run_name, metadata=metadata,
+                attach=lambda: self._tracer.attached(thread_id),
+                **kwargs)
+        except BaseException:
+            self._clear(reporter)
+            raise
+        self._deliver(chat_id, thread_id, result, reporter)
 
-    def _deliver(self, chat_id: int, thread_id: str, result: dict) -> None:
+    @staticmethod
+    def _clear(reporter) -> None:
+        if reporter is not None:
+            reporter.done()
+
+    def _deliver(self, chat_id: int, thread_id: str, result: dict,
+                 reporter=None) -> None:
         """Send the result, and close the trace once nothing is pending."""
         if not actions_in(result):
             self._tracer.finish(thread_id, {"reply": final_text(result)})
+        # Before the answer, so the chat ends as answer plus charts with no
+        # stale "computing shares…" line hanging above them.
+        self._clear(reporter)
         self._delivery.deliver(chat_id, result)

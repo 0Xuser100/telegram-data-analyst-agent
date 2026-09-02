@@ -191,9 +191,87 @@ def test_one_decision_per_pending_action(runner, graph):
     assert graph.invocations[-1][0].resume["decisions"] == [{"type": "approve"}] * 2
 
 
+def test_the_recursion_backstop_is_a_top_level_config_key(runner, graph):
+    """LangGraph reads recursion_limit from the top level. Nested inside
+    `configurable` it is silently ignored, which looks identical to working."""
+    runner.start(THREAD, "analyse this")
+    config = graph.invocations[-1][1]
+    assert config["recursion_limit"] == 200
+    assert "recursion_limit" not in config["configurable"]
+
+
+def test_the_default_round_cap_clears_a_real_analysis(runner, graph):
+    """A measured single-pass run on the current model needed 15 rounds; the
+    old default of 12 killed work that was going fine."""
+    graph.results = [interrupt_result(EXECUTE_ACTION)] * 20 + [ai_result("done")]
+    result = run_to_completion(runner, THREAD, "analyse this", AlwaysApproves())
+    assert result["messages"][-1].content == "done"
+
+
 def test_a_stuck_run_gives_up(runner, graph):
     """Money, not patience: an agent that keeps asking must be stopped."""
     graph.results = [interrupt_result(EXECUTE_ACTION)] * 20
     with pytest.raises(TooManyApprovals):
         run_to_completion(runner, THREAD, "analyse this", AlwaysApproves(), max_rounds=3)
     assert len(graph.invocations) == 4          # the start plus three resumes
+
+
+# --------------------------------------------------------------------------
+# saying what the run is working on
+# --------------------------------------------------------------------------
+
+def test_the_current_plan_item_is_reported(runner, graph, progress):
+    """The agent's own words about the actual analysis, not a step counter --
+    "checking whether State mixes totals with detail" means something to a
+    reader; "step 12" does not."""
+    graph.todos = [
+        {"content": "inspect the columns", "status": "completed"},
+        {"content": "check for aggregate rows", "status": "in_progress"},
+    ]
+    graph.delay = 0.05
+    runner.start(THREAD, "analyse this", progress=progress)
+    assert "check for aggregate rows" in progress.steps
+
+
+def test_nothing_is_reported_before_a_plan_exists(runner, graph, progress):
+    graph.todos = []
+    graph.delay = 0.05
+    runner.start(THREAD, "analyse this", progress=progress)
+    assert progress.steps == []
+
+
+def test_a_failure_to_read_the_plan_does_not_fail_the_run(runner, graph, progress):
+    """Progress is cosmetic; the analysis is not."""
+    class Exploding:
+        def get_state(self, config):
+            raise RuntimeError("checkpointer unavailable")
+
+        def invoke(self, payload, config=None):
+            return ai_result("done")
+
+    result = AgentRunner(Exploding(), progress=progress).start(THREAD, "x")
+    assert result["messages"][-1].content == "done"
+
+
+def test_the_notice_is_not_delayed_to_the_next_poll(graph, progress):
+    """The announcement used to be tested only after each poll, so a run
+    finishing between the deadline and the next boundary got no notice at all,
+    and otherwise it was up to one poll interval late."""
+    graph.delay = 0.15
+    runner = AgentRunner(graph, progress=progress, announce_after=0.02,
+                         step_every=5.0)
+    runner.start(THREAD, "analyse this")
+    assert progress.notes == ["Working on it…"]
+
+
+def test_the_notice_comes_before_the_first_status_line(graph, progress):
+    """The status poll used to fire at step_every, before the notice landed at
+    announce_after -- so a 2-4s run got a status message during exactly the
+    quiet period ANNOUNCE_AFTER exists to protect."""
+    graph.todos = [{"content": "inspecting the columns", "status": "in_progress"}]
+    graph.delay = 0.3
+    runner = AgentRunner(graph, progress=progress, announce_after=0.05,
+                         step_every=0.15)
+    runner.start(THREAD, "analyse this")
+    assert progress.notes == ["Working on it…"]
+    assert progress.steps                       # the status line still arrives

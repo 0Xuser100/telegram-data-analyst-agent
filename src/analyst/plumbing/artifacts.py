@@ -17,16 +17,14 @@ _PATH_RE = re.compile(
 
 # A reply claiming a chart it never made. Both patterns must match, so
 # "no chart was created" does not trip it.
-_CHART_WORD_RE = re.compile(r"\b(chart|plot|figure|dashboard|graph|visuali[sz]ation)\b", re.I)
-_MADE_WORD_RE = re.compile(r"\b(saved|created|generated|built|produced|attached|plotted|charted)\b", re.I)
 
 MISSING_FILE_WARNING = (
     "⚠️ The reply mentions {names}, but that file does not exist. The script was "
     "probably never executed — try asking again and approving the execute step."
 )
 MISSING_CHART_WARNING = (
-    "⚠️ That reply describes a chart, but no image was produced. The script was "
-    "probably never executed — ask again and approve the run step."
+    "⚠️ That analysis produced no chart. The script was probably never "
+    "executed — ask again and approve the run step."
 )
 
 
@@ -57,8 +55,11 @@ class ArtifactCollector:
         self._sent.pop(key, None)
 
     def new_images(self, key: object, text: str = "") -> list[str]:
-        """Images this run produced: paths named in the reply, plus anything new
-        in output/. The reply no longer names files, so the scan is the main one.
+        """Images this run produced, in reading order.
+
+        Sorted by filename, because the agent numbers its figures 01_, 02_, …
+        for exactly this. Scan order is creation order, which is right only by
+        coincidence and breaks the moment a figure is redrawn.
         """
         started = self._started.get(key, 0)
         already = self._sent.setdefault(key, set())
@@ -72,20 +73,24 @@ class ArtifactCollector:
                     found.append(os.path.normpath(entry.path))
 
         fresh = []
-        for path in found:
+        for path in sorted(found, key=lambda p: os.path.basename(p).lower()):
             absolute = os.path.abspath(path)
             if absolute not in already:
                 already.add(absolute)
                 fresh.append(path)
         return fresh
 
-    def warning_for(self, text: str, images_sent: int) -> str | None:
-        """A warning to show the user, or None when the reply is honest."""
+    def warning_for(self, text: str, images_sent: int,
+                    analysed: bool = False) -> str | None:
+        """A warning to show the user, or None when the reply is honest.
+
+        `analysed` says whether the run actually ran something. A greeting
+        legitimately produces no figures; an analysis never does.
+        """
         missing = sorted({path for path in mentioned_paths(text)
                           if not os.path.isfile(path)})
         if missing:
             return MISSING_FILE_WARNING.format(names=", ".join(missing))
-        if not images_sent and _CHART_WORD_RE.search(text or "") \
-                and _MADE_WORD_RE.search(text or ""):
+        if analysed and not images_sent:
             return MISSING_CHART_WARNING
         return None

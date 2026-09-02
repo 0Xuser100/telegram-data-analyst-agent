@@ -20,6 +20,13 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str
     OPENAI_MODEL: str
 
+    # Routine analysis steps -- a script written into output/ and run with the
+    # pinned interpreter -- proceed without an approval card. Set to false to
+    # gate every write and every command again, for data or a model you trust
+    # less. See agent/policy.py for exactly what "routine" means, and for why
+    # the narrowed gate is a scope control rather than a security one.
+    ANALYST_AUTO_APPROVE: bool = True
+
     # --- telegram ---
     TELEGRAM_BOT_TOKEN: Optional[str] = None
     # Comma-separated chat ids allowed to talk to the bot. The agent can run

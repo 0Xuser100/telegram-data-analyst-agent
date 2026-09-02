@@ -1,6 +1,6 @@
 # Testing
 
-Two parts: **how pytest works**, then **how this project's 442 tests are put
+Two parts: **how pytest works**, then **how this project's 554 tests are put
 together**. If you have never used pytest, read part 1 first — everything in
 part 2 is built out of those few ideas.
 
@@ -245,7 +245,7 @@ One file per module, plus one for the layer rule: 18 files.
 | `test_integration_flow.py` | 10 | Whole conversations: upload → approve → approve → chart |
 | `test_backend.py` | 6 | The shell workspace and the sample CSV |
 
-442 in total, from 326 test functions — `parametrize` accounts for the rest.
+554 in total, from 419 test functions — `parametrize` accounts for the rest.
 
 Coverage: 99% of the project's lines.
 
@@ -311,7 +311,7 @@ Three habits this suite keeps:
 ## The real run
 
 `tests_e2e/` is a separate suite: it reads your real key from `.env`, calls the
-real API on `gpt-4.1-mini-2025-04-14`, and runs one full analysis in a temp
+real API on `gpt-5.6-luna`, and runs one full analysis in a temp
 directory, approving every gate automatically.
 
 ```bash

@@ -8,8 +8,70 @@ import os
 
 from analyst.conversation.approvals import TelegramApprover, actions_in
 from analyst.plumbing.artifacts import ArtifactCollector
+from analyst.plumbing.telegram_client import MEDIA_GROUP_MAX, PHOTO_MAX_BYTES
+
+
+def _batched(items: list, size: int) -> list[list]:
+    return [items[start:start + size] for start in range(0, len(items), size)]
 
 NO_TEXT_REPLY = "Done, but the agent produced no text reply."
+
+
+# What ModelCallLimitMiddleware appends when a run is cut short. It jumps to
+# the end *before* the model call, so the agent never gets a turn to explain
+# itself and this becomes the last AI message -- which is what the user would
+# otherwise be handed instead of their analysis.
+LIMIT_PREFIX = "Model call limits exceeded"
+TRUNCATED_NOTICE = (
+    "⚠️ This run hit its step limit and stopped early, so the analysis above "
+    "is incomplete. Ask again to carry on from here."
+)
+
+
+def was_truncated(result: dict) -> bool:
+    for message in reversed(result.get("messages", []) or []):
+        if type(message).__name__ != "AIMessage":
+            continue
+        content = message.content
+        return isinstance(content, str) and content.startswith(LIMIT_PREFIX)
+    return False
+
+
+def is_a_follow_up(result: dict) -> bool:
+    """True when the user has asked more than once in this conversation.
+
+    The figure floor applies to a first analysis, to earn trust in it. The
+    prompt tells the agent not to redraw for follow-ups, and to compute a
+    missing number with a script -- so a follow-up that runs a script and
+    answers in prose is correct, and must not be warned about.
+    """
+    humans = sum(1 for message in result.get("messages", []) or []
+                 if type(message).__name__ == "HumanMessage")
+    return humans > 1
+
+
+def ran_an_analysis(result: dict) -> bool:
+    """True when THIS turn executed something.
+
+    The hallucinated-chart check keys off this rather than off the words in the
+    reply: a greeting owes no figures, an analysis owes at least two.
+
+    Scoped to the messages after the last human turn, because `result` is the
+    whole checkpointed thread. Reading all of it would mean that once a
+    conversation had ever run a script, every later reply was expected to carry
+    a figure -- including the follow-ups the prompt explicitly tells the agent
+    not to redraw for.
+    """
+    messages = result.get("messages", []) or []
+    for index in range(len(messages) - 1, -1, -1):
+        if type(messages[index]).__name__ == "HumanMessage":
+            messages = messages[index + 1:]
+            break
+    for message in messages:
+        for call in (getattr(message, "tool_calls", None) or []):
+            if call.get("name") == "execute":
+                return True
+    return False
 
 
 def final_text(result: dict) -> str:
@@ -50,23 +112,70 @@ class ResultDelivery:
             return
 
         text = final_text(result)
+        truncated = was_truncated(result)
+        if truncated:
+            # Skip the middleware's own message and relay the last real answer.
+            text = final_text({"messages": (result.get("messages") or [])[:-1]})
         self._client.send_message(chat_id, text or NO_TEXT_REPLY)
-        self.send_images(chat_id, text)
+        if truncated:
+            self._client.send_message(chat_id, TRUNCATED_NOTICE)
+        self.send_images(
+            chat_id, text,
+            analysed=(ran_an_analysis(result)
+                      and not is_a_follow_up(result)
+                      and not truncated))
 
-    def send_images(self, chat_id: int, text: str) -> None:
-        """Upload the figures, then warn if the reply claimed one that is not
-        there. No caption: the reply never names files, and repeating the
-        filename under the picture would add that noise back."""
+    def send_images(self, chat_id: int, text: str, analysed: bool = False) -> None:
+        """Upload the figures, then warn if none arrived from a real analysis.
+
+        Several figures go as one group, so an answer is one notification
+        rather than five. No caption: every figure carries its own title, and a
+        caption under it is a second title in a smaller font.
+        """
+        paths = self._artifacts.new_images(chat_id, text)
+        grouped = [p for p in paths if self._fits_in_a_group(p)]
+        oversized = [p for p in paths if p not in grouped]
+
         sent = 0
-        for path in self._artifacts.new_images(chat_id, text):
+        # In batches, because Telegram caps a group at ten and silently
+        # dropping the eleventh figure would also inflate the count feeding
+        # the missing-chart check below.
+        for batch in _batched(grouped, MEDIA_GROUP_MAX):
+            if len(batch) == 1:
+                sent += self._send_each(chat_id, batch)
+                continue
+            try:
+                self._client.send_media_group(chat_id, batch)
+                sent += len(batch)
+            except Exception as exc:            # fall back rather than lose them
+                print(f"[image] group send failed, sending singly: {exc}")
+                sent += self._send_each(chat_id, batch)
+
+        sent += self._send_each(chat_id, oversized)
+
+        warning = self._artifacts.warning_for(text, sent, analysed)
+        if warning:
+            self._client.send_message(chat_id, warning)
+
+    def _send_each(self, chat_id: int, paths: list[str]) -> int:
+        """One at a time. A failed upload must never cost the user the text."""
+        sent = 0
+        for path in paths:
             try:
                 self._client.send_photo(chat_id, path)
                 sent += 1
-            except Exception as exc:                # a failed upload must not
-                print(f"[image] failed to send {path}: {exc}")   # lose the text
+            except Exception as exc:
+                print(f"[image] failed to send {path}: {exc}")
                 self._client.send_message(
                     chat_id, f"Couldn't upload {os.path.basename(path)}.")
+        return sent
 
-        warning = self._artifacts.warning_for(text, sent)
-        if warning:
-            self._client.send_message(chat_id, warning)
+    @staticmethod
+    def _fits_in_a_group(path: str) -> bool:
+        """A media group carries photos only, and send_photo silently falls
+        back to a document above the photo ceiling. Such a file has to travel
+        on its own."""
+        try:
+            return os.path.getsize(path) <= PHOTO_MAX_BYTES
+        except OSError:
+            return False

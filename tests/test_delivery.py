@@ -107,16 +107,24 @@ def test_a_failed_upload_does_not_lose_the_answer(delivery, client, clean_output
     assert client.said("couldn't upload")
 
 
-def test_a_hallucinated_chart_is_called_out(delivery, client, clean_output):
+def analysed(text):
+    """A result that ran a script, which is what makes figures owed."""
+    reply = AIMessage("")
+    reply.tool_calls = [{"name": "execute", "args": {}, "id": "1"}]
+    return {"messages": [reply, AIMessage(text)]}
+
+
+def test_an_analysis_that_produced_no_chart_is_called_out(delivery, client, clean_output):
     delivery.start_run(CHAT)
-    delivery.deliver(CHAT, {"messages": [AIMessage("A chart has been saved.")]})
+    delivery.deliver(CHAT, analysed("Heart disease leads at 33.7%."))
     assert client.photos == []
-    assert client.said("no image was produced")
+    assert client.said("produced no chart")
 
 
-def test_an_honest_reply_gets_no_warning(delivery, client, clean_output):
+def test_a_greeting_is_not_asked_for_a_chart(delivery, client, clean_output):
+    """No execute call, so nothing was analysed and nothing is owed."""
     delivery.start_run(CHAT)
-    delivery.deliver(CHAT, {"messages": [AIMessage("Nothing worth plotting here.")]})
+    delivery.deliver(CHAT, {"messages": [AIMessage("Hello! Send me a CSV.")]})
     assert len(client.texts) == 1
 
 
@@ -128,3 +136,159 @@ def test_forget_clears_what_was_already_sent(delivery, client, clean_output):
     delivery.start_run(CHAT)
     delivery.send_images(CHAT, "")
     assert len(client.photos) == 2
+
+
+# --------------------------------------------------------------------------
+# several figures
+# --------------------------------------------------------------------------
+
+def figure(directory, name, size=1024):
+    path = os.path.join(directory, name)
+    with open(path, "wb") as fh:
+        fh.write(b"x" * size)
+    return path
+
+
+def test_several_figures_arrive_as_one_block(delivery, client, clean_output):
+    """Five separate uploads means five notifications, which buries the
+    message they belong to."""
+    delivery.start_run(CHAT)
+    for name in ("01_quality.png", "02_by_cause.png", "03_trend.png"):
+        figure(clean_output, name)
+    delivery.deliver(CHAT, analysed("Heart disease leads."))
+
+    assert len(client.groups) == 1
+    assert client.photos == []
+
+
+def test_the_block_is_in_reading_order(delivery, client, clean_output):
+    """Written out of order on purpose: the number is what fixes the order,
+    not the filesystem timestamp."""
+    delivery.start_run(CHAT)
+    for name in ("03_trend.png", "01_quality.png", "02_by_cause.png"):
+        figure(clean_output, name)
+    delivery.deliver(CHAT, analysed("Heart disease leads."))
+
+    names = [os.path.basename(p) for p in client.groups[0][1]]
+    assert names == ["01_quality.png", "02_by_cause.png", "03_trend.png"]
+
+
+def test_a_single_figure_does_not_need_a_block(delivery, client, clean_output):
+    delivery.start_run(CHAT)
+    figure(clean_output, "01_quality.png")
+    delivery.deliver(CHAT, analysed("Not much here."))
+
+    assert client.groups == []
+    assert len(client.photos) == 1
+
+
+def test_a_failed_block_falls_back_to_one_at_a_time(delivery, client, clean_output):
+    """Losing three figures because a group call failed would be worse than
+    three notifications."""
+    client.group_error = RuntimeError("group send failed")
+    delivery.start_run(CHAT)
+    for name in ("01_a.png", "02_b.png", "03_c.png"):
+        figure(clean_output, name)
+    delivery.deliver(CHAT, analysed("Heart disease leads."))
+
+    assert len(client.photos) == 3
+    assert client.said("Heart disease leads")
+
+
+def test_an_oversized_figure_travels_on_its_own(delivery, client, clean_output):
+    """A media group carries photos only, and send_photo falls back to a
+    document above the ceiling -- such a file cannot ride in the group."""
+    from analyst.plumbing.telegram_client import PHOTO_MAX_BYTES
+    delivery.start_run(CHAT)
+    figure(clean_output, "01_a.png")
+    figure(clean_output, "02_b.png")
+    figure(clean_output, "03_huge.png", size=PHOTO_MAX_BYTES + 1)
+    delivery.deliver(CHAT, analysed("Heart disease leads."))
+
+    grouped = [os.path.basename(p) for p in client.groups[0][1]]
+    assert grouped == ["01_a.png", "02_b.png"]
+    assert [os.path.basename(p) for _, p in client.photos] == ["03_huge.png"]
+
+
+def test_a_delivered_block_counts_as_images_for_the_warning(delivery, client, clean_output):
+    delivery.start_run(CHAT)
+    figure(clean_output, "01_a.png")
+    figure(clean_output, "02_b.png")
+    delivery.deliver(CHAT, analysed("Heart disease leads."))
+
+    assert not client.said("produced no chart")
+
+
+def test_a_follow_up_that_draws_nothing_is_not_flagged(delivery, client, clean_output):
+    """`result` is the whole checkpointed thread, so reading all of it meant
+    that once a conversation had ever run a script, every later reply was
+    expected to carry a figure -- including the follow-ups the prompt
+    explicitly tells the agent not to redraw for."""
+    from langchain_core.messages import HumanMessage
+    first = AIMessage("")
+    first.tool_calls = [{"name": "execute", "args": {}, "id": "1"}]
+
+    delivery.start_run(CHAT)
+    delivery.deliver(CHAT, {"messages": [
+        HumanMessage("analyse this"), first, AIMessage("**Heart disease leads**"),
+        HumanMessage("which state was highest?"), AIMessage("Texas, at 12.4%."),
+    ]})
+
+    assert not client.said("produced no chart")
+
+
+def test_more_figures_than_one_group_all_arrive(delivery, client, clean_output):
+    """Telegram caps a group at ten. Silently slicing meant the eleventh
+    figure vanished and the count feeding the missing-chart check was wrong."""
+    from analyst.plumbing.telegram_client import MEDIA_GROUP_MAX
+    delivery.start_run(CHAT)
+    total = MEDIA_GROUP_MAX + 2
+    for index in range(total):
+        figure(clean_output, f"{index:02d}_fig.png")
+    delivery.deliver(CHAT, analysed("Heart disease leads."))
+
+    delivered = sum(len(paths) for _, paths in client.groups) + len(client.photos)
+    assert delivered == total
+
+
+def follow_up(text, ran_script=True):
+    """A second question in the same conversation."""
+    from langchain_core.messages import HumanMessage
+    first = AIMessage("")
+    first.tool_calls = [{"name": "execute", "args": {}, "id": "1"}]
+    second = AIMessage("")
+    second.tool_calls = [{"name": "execute", "args": {}, "id": "2"}]
+    messages = [HumanMessage("analyse this"), first, AIMessage("first answer"),
+                HumanMessage("which state was highest?")]
+    if ran_script:
+        messages.append(second)
+    messages.append(AIMessage(text))
+    return {"messages": messages}
+
+
+def test_a_follow_up_that_runs_a_script_without_drawing_is_not_flagged(
+        delivery, client, clean_output):
+    """The prompt tells the agent to compute a missing number with a script and
+    answer in prose. That correct behaviour must not be reported as a failure
+    telling the user to redo work that succeeded."""
+    delivery.start_run(CHAT)
+    delivery.deliver(CHAT, follow_up("Texas, at 12.4%."))
+    assert not client.said("produced no chart")
+
+
+def test_a_truncated_run_relays_the_analysis_not_the_internal_message(
+        delivery, client, clean_output):
+    """ModelCallLimitMiddleware jumps to the end before the model call, so the
+    agent never gets a turn to explain itself and its own message is last.
+    Relaying that hands the user "Model call limits exceeded: run limit
+    (40/40)" instead of their analysis."""
+    from analyst.conversation.delivery import LIMIT_PREFIX
+    delivery.start_run(CHAT)
+    delivery.deliver(CHAT, {"messages": [
+        AIMessage("**Heart disease leads at 33.7%**"),
+        AIMessage(f"{LIMIT_PREFIX}: run limit (40/40)"),
+    ]})
+
+    assert client.said("Heart disease leads")
+    assert not client.said("Model call limits exceeded")
+    assert client.said("stopped early")

@@ -16,7 +16,7 @@ import tempfile
 import pytest
 
 PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-EXPECTED_MODEL = "gpt-4.1-mini-2025-04-14"
+EXPECTED_MODEL = "gpt-5.6-luna"
 
 
 def _load_dotenv(path: str) -> dict:
