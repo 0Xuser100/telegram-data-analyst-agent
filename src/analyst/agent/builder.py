@@ -23,6 +23,7 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 
 from analyst.plumbing.backend import backend
 from analyst.config import get_settings
+from analyst.agent.plan_visibility import PlanVisibilityMiddleware
 from analyst.agent.policy import (
     is_routine_execute,
     is_routine_write,
@@ -37,7 +38,11 @@ OUTPUT_DIR = "./output"
 # never fires at ~40k per turn: the conversation just grew until it was
 # expensive. Evicted messages are written to conversation_history/ first.
 COMPACT_AT_TOKENS = 40_000
-KEEP_MESSAGES = 6
+# Six messages is roughly two tool round-trips, which was plenty when a run was
+# two. A measured analysis makes 29 tool calls, and at six the model can no
+# longer see what its own last script printed. The token trigger stays where it
+# is: raising that reopens the cost problem it was set to fix.
+KEEP_MESSAGES = 16
 
 # What bounds one run. Nothing did before: deepagents sets recursion_limit to
 # 9_999, and the CLI's own round cap never sat on the bot's path. A measured
@@ -154,6 +159,10 @@ def build_agent(model=None, checkpointer=None, target_backend=None, summarizer=N
         system_prompt=SYSTEM_RULES.format(python_path=python_path, output_dir=output_dir),
         interrupt_on=build_interrupt_on(auto_approve),
         middleware=[TodoListMiddleware(),
+                    # The plan reaches the model only as a tool result, which
+                    # compaction evicts mid-run. Without this the agent forgets
+                    # what it set out to do.
+                    PlanVisibilityMiddleware(),
                     # `end` rather than `error`: the measured run that the old
                     # cap would have killed had produced the right analysis.
                     # A bounded run answers with what it has.

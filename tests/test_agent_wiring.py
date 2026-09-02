@@ -59,7 +59,7 @@ def test_build_summarizer_compacts_at_40k(mod):
     expensive, not until it was compacted."""
     summarizer = mod.build_summarizer(mod.model)
     assert summarizer._lc_helper.trigger == ("tokens", 40_000)
-    assert summarizer._lc_helper.keep == ("messages", 6)
+    assert summarizer._lc_helper.keep == ("messages", 16)
 
 
 def test_tool_arg_clipping_is_preserved(mod):
@@ -153,6 +153,12 @@ def test_reads_are_not_gated(mod):
 # --------------------------------------------------------------------------
 # run bounds
 # --------------------------------------------------------------------------
+
+def test_the_plan_is_kept_visible(stack):
+    """Compaction evicts the tool result the plan arrives in, so it has to be
+    re-attached to the prompt or a long run loses its way."""
+    assert "PlanVisibilityMiddleware" in [m.name for m in stack]
+
 
 def test_a_run_is_bounded_by_model_calls(stack):
     """Nothing bounded a run before: deepagents sets recursion_limit to 9_999,

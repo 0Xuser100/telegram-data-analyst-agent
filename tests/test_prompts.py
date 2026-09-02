@@ -123,8 +123,26 @@ def test_wide_files_get_a_narrower_summary():
     assert "transpose" in RENDERED.lower()
 
 
-def test_one_inspect_step_is_enough():
-    assert "One inspect step is enough" in RENDERED
+def test_the_agent_is_told_to_plan_and_revise():
+    """The planning tool has been wired in all along and the prompt never
+    mentioned it, so the agent worked one pass and stopped."""
+    assert "write_todos" in RENDERED
+    assert "REVISE that plan" in RENDERED
+
+
+def test_the_loop_has_a_stop_condition():
+    """Without one an iterative agent circles until a bound kills it."""
+    assert "stop telling you anything new" in RENDERED
+
+
+def test_findings_are_written_down_not_remembered():
+    """Compaction replaces the conversation; the filesystem survives it."""
+    assert "findings.md" in RENDERED
+    assert "compacted" in RENDERED
+
+
+def test_one_pass_is_no_longer_prescribed():
+    assert "One inspect step is enough" not in RENDERED
 
 
 def test_the_answer_starts_with_what_the_data_is():
