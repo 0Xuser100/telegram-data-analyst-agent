@@ -145,6 +145,23 @@ def test_one_pass_is_no_longer_prescribed():
     assert "One inspect step is enough" not in RENDERED
 
 
+def test_aggregates_must_be_looked_for_before_summing():
+    """The failure that started this: summing a file that mixes national
+    totals with per-state rows produced a figure three times too large,
+    reported with no hedge."""
+    assert "AGGREGATES HIDING IN THE DATA" in RENDERED
+    assert "before you sum" in RENDERED.lower()
+
+
+def test_the_inspect_step_counts_distinct_values():
+    """Distinct-value counts are how the aggregate row becomes visible."""
+    assert "number of distinct values in every categorical column" in RENDERED
+
+
+def test_the_denominator_must_be_stated():
+    assert "which denominator" in RENDERED
+
+
 def test_the_answer_starts_with_what_the_data_is():
     assert "what the data is" in RENDERED
     assert "what one row represents" in RENDERED

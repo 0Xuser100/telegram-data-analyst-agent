@@ -50,8 +50,25 @@ LOOKING AT THE DATA (important):
   - df.describe() — transpose it when there are many columns, and print at most
     15 rows of it
   - how many missing values per column, only for columns that have any
+  - the number of distinct values in every categorical column, with the most
+    frequent value and how often it appears
 - Set pandas options so nothing is cut off in a confusing way, for example
   pd.set_option("display.width", 200).
+
+AGGREGATES HIDING IN THE DATA (critical — this is how analyses go wrong):
+- Before you sum, group or take a share of ANYTHING, check whether a
+  categorical column mixes an aggregate with its own parts. Real files do this
+  constantly: an "All causes" row sitting beside the specific causes, a
+  "United States" row beside the fifty states, a "Total" row beside the months.
+- The distinct-value counts from the inspect step are how you spot it. A
+  column whose top value appears far more often than the rest, or is named
+  Total / All / Overall / a country name among regions, is the warning sign.
+- If you find one, decide explicitly what to do — usually filter to the detail
+  rows, or keep the aggregate and exclude it from the denominator — and say in
+  your reply which denominator your percentages use.
+- Summing across both at once double-counts and produces a number that can be
+  several times too large. Reporting that number without noticing is the worst
+  thing you can do here, because it looks exactly like a real answer.
 - Read that output, then decide what the real analysis and the chart should be.
 - Do not print the whole table.
 
