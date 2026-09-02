@@ -81,7 +81,9 @@ def _asks_unless(predicate):
     )
 
 
-def build_interrupt_on(auto_approve: bool = True) -> dict:
+def build_interrupt_on(auto_approve: bool = True,
+                       python_path: str = sys.executable,
+                       output_dir: str = OUTPUT_DIR) -> dict:
     """Approval rules for the graph.
 
     With auto-approval off, every write and every command asks, as before --
@@ -92,11 +94,17 @@ def build_interrupt_on(auto_approve: bool = True) -> dict:
         lambda request: not is_sensitive_read(request))}
     if not auto_approve:
         return rules
+    # Bound to the same interpreter and directory the prompt tells the agent
+    # to use. Left at their defaults these reject every legitimate call, and
+    # auto-approval silently reverts to a card on every step.
     return {
         **rules,
-        "execute": _asks_unless(is_routine_execute),
-        "write_file": _asks_unless(is_routine_write),
-        "edit_file": _asks_unless(is_routine_write),
+        "execute": _asks_unless(
+            lambda request: is_routine_execute(request, python_path, output_dir)),
+        "write_file": _asks_unless(
+            lambda request: is_routine_write(request, output_dir)),
+        "edit_file": _asks_unless(
+            lambda request: is_routine_write(request, output_dir)),
     }
 
 
@@ -157,7 +165,7 @@ def build_agent(model=None, checkpointer=None, target_backend=None, summarizer=N
         backend=target_backend,
         checkpointer=checkpointer if checkpointer is not None else build_checkpointer(),
         system_prompt=SYSTEM_RULES.format(python_path=python_path, output_dir=output_dir),
-        interrupt_on=build_interrupt_on(auto_approve),
+        interrupt_on=build_interrupt_on(auto_approve, python_path, output_dir),
         middleware=[TodoListMiddleware(),
                     # The plan reaches the model only as a tool result, which
                     # compaction evicts mid-run. Without this the agent forgets

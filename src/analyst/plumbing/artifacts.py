@@ -17,8 +17,6 @@ _PATH_RE = re.compile(
 
 # A reply claiming a chart it never made. Both patterns must match, so
 # "no chart was created" does not trip it.
-_CHART_WORD_RE = re.compile(r"\b(chart|plot|figure|dashboard|graph|visuali[sz]ation)\b", re.I)
-_MADE_WORD_RE = re.compile(r"\b(saved|created|generated|built|produced|attached|plotted|charted)\b", re.I)
 
 MISSING_FILE_WARNING = (
     "⚠️ The reply mentions {names}, but that file does not exist. The script was "

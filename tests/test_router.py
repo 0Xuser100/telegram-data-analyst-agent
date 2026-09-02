@@ -433,3 +433,34 @@ def test_the_status_line_is_cleared_before_the_answer(client, graph, threads):
 
     assert len(reporters) == 1
     assert reporters[0].finished == 1
+
+
+def test_the_status_line_is_cleared_when_the_run_fails(client, graph, threads):
+    """The bot reports the failure; without this the "computing shares…" line
+    sits above it for good, because the next turn builds a fresh reporter."""
+    from conftest import FakeProgress
+    from analyst.agent.runner import AgentRunner
+    from analyst.conversation.delivery import ResultDelivery
+    from analyst.conversation.router import UpdateRouter
+    from analyst.plumbing.artifacts import ArtifactCollector
+
+    reporters = []
+
+    def make_reporter(chat_id):
+        reporters.append(FakeProgress())
+        return reporters[-1]
+
+    router = UpdateRouter(
+        client=client,
+        runner=AgentRunner(graph, step_every=0.01),
+        threads=threads,
+        delivery=ResultDelivery(client, ArtifactCollector(output_dir="./output")),
+        allowed_chats={ALLOWED_CHAT},
+        upload_task_template="{file_path}",
+        progress_for=make_reporter)
+
+    graph.error = RuntimeError("model exploded")
+    with pytest.raises(RuntimeError):
+        router.handle_message(text_update("analyse it"))
+
+    assert reporters[0].finished == 1

@@ -176,12 +176,19 @@ class AgentRunner:
         deadline = time.monotonic() + delay
         readable = True
         while worker.is_alive():
-            worker.join(self._step_every)
-            if not worker.is_alive():
-                break
+            # Wait only as far as the announcement deadline, so the notice is
+            # not pushed to the next poll boundary -- or skipped entirely by a
+            # run that ends between the two.
+            remaining = deadline - time.monotonic()
+            wait = self._step_every
+            if not announced and 0 < remaining < wait:
+                wait = remaining
+            worker.join(wait)
             if notice and not announced and time.monotonic() >= deadline:
                 progress.note(notice)
                 announced = True
+            if not worker.is_alive():
+                break
             if not readable:
                 continue
             try:

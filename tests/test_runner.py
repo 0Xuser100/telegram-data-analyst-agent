@@ -251,3 +251,14 @@ def test_a_failure_to_read_the_plan_does_not_fail_the_run(runner, graph, progres
 
     result = AgentRunner(Exploding(), progress=progress).start(THREAD, "x")
     assert result["messages"][-1].content == "done"
+
+
+def test_the_notice_is_not_delayed_to_the_next_poll(graph, progress):
+    """The announcement used to be tested only after each poll, so a run
+    finishing between the deadline and the next boundary got no notice at all,
+    and otherwise it was up to one poll interval late."""
+    graph.delay = 0.15
+    runner = AgentRunner(graph, progress=progress, announce_after=0.02,
+                         step_every=5.0)
+    runner.start(THREAD, "analyse this")
+    assert progress.notes == ["Working on it…"]

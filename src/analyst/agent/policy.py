@@ -35,10 +35,17 @@ module is not the last word on the subject.
 """
 
 import os
+import re
 import shlex
 import sys
 
 OUTPUT_DIR = "./output"
+
+# Everything a legitimate `<interpreter> <script>.py` needs, and nothing a shell
+# gives meaning to. Token counting alone does NOT catch these: shlex splits on
+# whitespace, so `python output/a&calc&b.py` is two tokens and would sail
+# through every other check straight into subprocess.run(shell=True).
+_SAFE_COMMAND = re.compile(r'^[A-Za-z0-9 _.:/\\"-]+$')
 
 # Reading any of these should never be routine. Not a security boundary — a
 # script the agent runs can still open them — but the agent's own file tools
@@ -50,12 +57,12 @@ def _resolve(path: str) -> str:
     return os.path.realpath(os.path.join(os.getcwd(), path))
 
 
-def _under_output(path: str) -> bool:
+def _under_output(path: str, output_dir: str = OUTPUT_DIR) -> bool:
     """True when `path` resolves inside the output directory.
 
     Resolved, not compared as text, so `output/../secrets.py` is caught.
     """
-    root = os.path.realpath(OUTPUT_DIR)
+    root = os.path.realpath(output_dir)
     try:
         return os.path.commonpath([root, _resolve(path)]) == root
     except ValueError:                      # different drive on Windows
@@ -68,7 +75,8 @@ def _argument(request, name: str) -> str | None:
     return value if isinstance(value, str) and value.strip() else None
 
 
-def is_routine_execute(request, python_path: str = None) -> bool:
+def is_routine_execute(request, python_path: str = None,
+                       output_dir: str = OUTPUT_DIR) -> bool:
     """True when this `execute` call is the ordinary analysis shape.
 
     A whitelist of exactly one shape — the pinned interpreter, one `.py` file,
@@ -84,6 +92,12 @@ def is_routine_execute(request, python_path: str = None) -> bool:
     if command is None:
         return False
 
+    # Before anything else: no character the shell would act on. The command
+    # reaches subprocess.run(shell=True), so `&`, `|`, `;`, backticks and
+    # `$(...)` all execute -- and none of them need a space around them.
+    if not _SAFE_COMMAND.match(command):
+        return False
+
     try:
         tokens = shlex.split(command, posix=False)
     except ValueError:                      # unbalanced quotes
@@ -97,16 +111,16 @@ def is_routine_execute(request, python_path: str = None) -> bool:
         return False
     if not script.lower().endswith(".py"):
         return False
-    return _under_output(script)
+    return _under_output(script, output_dir)
 
 
-def is_routine_write(request) -> bool:
+def is_routine_write(request, output_dir: str = OUTPUT_DIR) -> bool:
     """True when this write lands inside the agent's own workspace.
 
     Covers `write_file` and `edit_file` alike: same operation, same risk.
     """
     path = _argument(request, "file_path")
-    return False if path is None else _under_output(path)
+    return False if path is None else _under_output(path, output_dir)
 
 
 def is_sensitive_read(request) -> bool:

@@ -217,3 +217,35 @@ def test_a_delivered_block_counts_as_images_for_the_warning(delivery, client, cl
     delivery.deliver(CHAT, analysed("Heart disease leads."))
 
     assert not client.said("produced no chart")
+
+
+def test_a_follow_up_that_draws_nothing_is_not_flagged(delivery, client, clean_output):
+    """`result` is the whole checkpointed thread, so reading all of it meant
+    that once a conversation had ever run a script, every later reply was
+    expected to carry a figure -- including the follow-ups the prompt
+    explicitly tells the agent not to redraw for."""
+    from langchain_core.messages import HumanMessage
+    first = AIMessage("")
+    first.tool_calls = [{"name": "execute", "args": {}, "id": "1"}]
+
+    delivery.start_run(CHAT)
+    delivery.deliver(CHAT, {"messages": [
+        HumanMessage("analyse this"), first, AIMessage("**Heart disease leads**"),
+        HumanMessage("which state was highest?"), AIMessage("Texas, at 12.4%."),
+    ]})
+
+    assert not client.said("produced no chart")
+
+
+def test_more_figures_than_one_group_all_arrive(delivery, client, clean_output):
+    """Telegram caps a group at ten. Silently slicing meant the eleventh
+    figure vanished and the count feeding the missing-chart check was wrong."""
+    from analyst.plumbing.telegram_client import MEDIA_GROUP_MAX
+    delivery.start_run(CHAT)
+    total = MEDIA_GROUP_MAX + 2
+    for index in range(total):
+        figure(clean_output, f"{index:02d}_fig.png")
+    delivery.deliver(CHAT, analysed("Heart disease leads."))
+
+    delivered = sum(len(paths) for _, paths in client.groups) + len(client.photos)
+    assert delivered == total

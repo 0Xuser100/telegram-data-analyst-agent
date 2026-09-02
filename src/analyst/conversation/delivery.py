@@ -8,18 +8,33 @@ import os
 
 from analyst.conversation.approvals import TelegramApprover, actions_in
 from analyst.plumbing.artifacts import ArtifactCollector
-from analyst.plumbing.telegram_client import PHOTO_MAX_BYTES
+from analyst.plumbing.telegram_client import MEDIA_GROUP_MAX, PHOTO_MAX_BYTES
+
+
+def _batched(items: list, size: int) -> list[list]:
+    return [items[start:start + size] for start in range(0, len(items), size)]
 
 NO_TEXT_REPLY = "Done, but the agent produced no text reply."
 
 
 def ran_an_analysis(result: dict) -> bool:
-    """True when the run actually executed something.
+    """True when THIS turn executed something.
 
     The hallucinated-chart check keys off this rather than off the words in the
     reply: a greeting owes no figures, an analysis owes at least two.
+
+    Scoped to the messages after the last human turn, because `result` is the
+    whole checkpointed thread. Reading all of it would mean that once a
+    conversation had ever run a script, every later reply was expected to carry
+    a figure -- including the follow-ups the prompt explicitly tells the agent
+    not to redraw for.
     """
-    for message in result.get("messages", []) or []:
+    messages = result.get("messages", []) or []
+    for index in range(len(messages) - 1, -1, -1):
+        if type(messages[index]).__name__ == "HumanMessage":
+            messages = messages[index + 1:]
+            break
+    for message in messages:
         for call in (getattr(message, "tool_calls", None) or []):
             if call.get("name") == "execute":
                 return True
@@ -79,15 +94,19 @@ class ResultDelivery:
         oversized = [p for p in paths if p not in grouped]
 
         sent = 0
-        if len(grouped) > 1:
+        # In batches, because Telegram caps a group at ten and silently
+        # dropping the eleventh figure would also inflate the count feeding
+        # the missing-chart check below.
+        for batch in _batched(grouped, MEDIA_GROUP_MAX):
+            if len(batch) == 1:
+                sent += self._send_each(chat_id, batch)
+                continue
             try:
-                self._client.send_media_group(chat_id, grouped)
-                sent += len(grouped)
+                self._client.send_media_group(chat_id, batch)
+                sent += len(batch)
             except Exception as exc:            # fall back rather than lose them
                 print(f"[image] group send failed, sending singly: {exc}")
-                sent += self._send_each(chat_id, grouped)
-        else:
-            sent += self._send_each(chat_id, grouped)
+                sent += self._send_each(chat_id, batch)
 
         sent += self._send_each(chat_id, oversized)
 

@@ -169,3 +169,51 @@ def test_a_read_with_no_path_asks():
     class Request:
         tool_call = {"name": "read_file", "args": {}}
     assert policy.is_sensitive_read(Request()) is True
+
+
+# --------------------------------------------------------------------------
+# shell metacharacters without spaces
+# --------------------------------------------------------------------------
+
+@pytest.mark.parametrize("script", [
+    "output/a&calc&b.py",           # & chains on cmd
+    "output/a|x.py",                # | pipes
+    "output/a$(id)b.py",            # $( ) substitutes
+    "output/a;rm.py",               # ; sequences
+    "output/a`id`.py",              # backticks substitute
+    "output/a>out.py",              # > redirects
+    "output/a\nb.py",               # a newline is a command separator
+])
+def test_a_metacharacter_inside_the_token_still_asks(script):
+    """Token counting alone does not catch these. shlex splits on whitespace,
+    so `python output/a&calc&b.py` is exactly two tokens and passed every
+    other check -- straight into subprocess.run(shell=True), which runs the
+    `calc` between the ampersands."""
+    assert routine(f"{PY} {script}") is False
+
+
+# --------------------------------------------------------------------------
+# the output directory is configurable
+# --------------------------------------------------------------------------
+
+def test_a_configured_output_directory_is_honoured(tmp_path, monkeypatch):
+    """build_agent takes an output_dir and puts it in the prompt. If the
+    predicate keeps resolving ./output, every legitimate call is refused and
+    auto-approval silently reverts to a card on every step."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "figures").mkdir()
+
+    class Write:
+        tool_call = {"name": "write_file", "args": {"file_path": "figures/a.py"}}
+
+    assert policy.is_routine_write(Write(), output_dir="./figures") is True
+    assert policy.is_routine_write(Write()) is False        # the default still refuses
+
+
+def test_a_configured_interpreter_is_honoured():
+    class Run:
+        tool_call = {"name": "execute",
+                     "args": {"command": "/usr/bin/python3 output/a.py"}}
+
+    assert policy.is_routine_execute(Run(), python_path="/usr/bin/python3") is True
+    assert policy.is_routine_execute(Run()) is False
