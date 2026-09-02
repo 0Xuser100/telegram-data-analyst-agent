@@ -193,6 +193,28 @@ def test_the_denominator_must_be_stated():
     assert "which denominator" in RENDERED
 
 
+def test_a_follow_up_reads_the_findings_file():
+    """Compaction has usually replaced the conversation by the time a
+    follow-up arrives, so the file is the reliable record."""
+    assert "Answer it from" in FLAT or "findings.md" in FLAT
+    assert "Do NOT re-read the data file" in FLAT
+
+
+def test_the_figure_floor_does_not_apply_to_a_follow_up():
+    """It earns trust in a first analysis; on every reply it is noise."""
+    assert "floor of figures does NOT apply to a follow-up" in FLAT
+
+
+def test_an_unknown_number_is_computed_not_inferred():
+    assert "Never infer it from what is already on screen" in FLAT
+
+
+def test_an_ambiguous_dataset_is_asked_about_not_guessed():
+    """An answer about the wrong file looks exactly like an answer about the
+    right one, so this is the one failure with no recovery."""
+    assert "Do not guess" in FLAT
+
+
 def test_the_answer_starts_with_what_the_data_is():
     assert "Open with what the data is" in FLAT
 

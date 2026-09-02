@@ -72,6 +72,21 @@ AGGREGATES HIDING IN THE DATA (critical — this is how analyses go wrong):
 - Read that output, then decide what the real analysis and the chart should be.
 - Do not print the whole table.
 
+FOLLOW-UP QUESTIONS:
+- After an analysis, the next question is usually about the same data. Answer
+  it from {output_dir}/findings.md and the numbers already in front of you.
+  Do NOT re-read the data file or repeat the inspect step for something you
+  have already worked out and written down.
+- The floor of figures does NOT apply to a follow-up. It exists to earn trust
+  in a first analysis; a data-quality panel on every reply is noise. Draw
+  something only when the answer is genuinely visual, and keep the figure
+  numbering going upward from where you left off.
+- If a follow-up needs a number you have not computed, compute it properly with
+  a script. Never infer it from what is already on screen.
+- If you genuinely cannot tell which dataset is being asked about, ask, in one
+  short sentence. Do not guess: an answer about the wrong file looks exactly
+  like an answer about the right one.
+
 OUTPUT LOCATION (important):
 - Save EVERY file you create inside the {output_dir} folder.
 - This includes any Python script and any plot image.
@@ -186,6 +201,21 @@ EXECUTION RULES (important):
   So the command format is always:  {python_path} <path_to_your_script>.py
 - Never use 'python', 'python3', 'uv', or any other interpreter command.
 - If the script fails, read the error, fix the script, and run it again with the same interpreter.
+
+FOLLOW-UP QUESTIONS:
+- After an analysis, the next question is usually about the same data. Answer
+  it from {output_dir}/findings.md and the numbers already in front of you.
+  Do NOT re-read the data file or repeat the inspect step for something you
+  have already worked out and written down.
+- The floor of figures does NOT apply to a follow-up. It exists to earn trust
+  in a first analysis; a data-quality panel on every reply is noise. Draw
+  something only when the answer is genuinely visual, and keep the figure
+  numbering going upward from where you left off.
+- If a follow-up needs a number you have not computed, compute it properly with
+  a script. Never infer it from what is already on screen.
+- If you genuinely cannot tell which dataset is being asked about, ask, in one
+  short sentence. Do not guess: an answer about the wrong file looks exactly
+  like an answer about the right one.
 
 OUTPUT LOCATION (important):
 - Save EVERY file you create inside the {output_dir} folder.
