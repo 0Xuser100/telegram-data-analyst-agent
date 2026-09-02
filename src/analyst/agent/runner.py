@@ -5,6 +5,7 @@ reporter, so both the bot and the terminal use the same code path.
 """
 
 import threading
+import time
 from contextlib import nullcontext
 
 from langgraph.types import Command
@@ -25,6 +26,24 @@ RECURSION_LIMIT = 200
 # stopped work that was going fine. After the approval policy narrowed, most
 # rounds disappear and this is a backstop rather than a live constraint.
 MAX_APPROVAL_ROUNDS = 40
+
+# How often the run is asked what it is working on. Frequent enough to look
+# alive, rare enough that the checkpointer is not hammered.
+STEP_POLL_SECONDS = 2.0
+
+
+def current_step(state) -> str | None:
+    """The plan item the agent says it is working on, if any.
+
+    Reads `todos`, which the agent writes itself, so the text is in its own
+    words about the actual analysis. A step counter would be an implementation
+    detail with no meaning to a reader.
+    """
+    todos = (getattr(state, "values", None) or {}).get("todos") or []
+    for todo in todos:
+        if isinstance(todo, dict) and todo.get("status") == "in_progress":
+            return todo.get("content")
+    return None
 
 
 def run_to_completion(runner: "AgentRunner", thread_id: str, task,
@@ -58,10 +77,12 @@ class AgentRunner:
     """
 
     def __init__(self, agent, progress: Progress | None = None,
-                 announce_after: float = ANNOUNCE_AFTER):
+                 announce_after: float = ANNOUNCE_AFTER,
+                 step_every: float = STEP_POLL_SECONDS):
         self._agent = agent
         self._progress = progress or SilentProgress()
         self._announce_after = announce_after
+        self._step_every = step_every
 
     # -- reading state -----------------------------------------------------
 
@@ -130,17 +151,44 @@ class AgentRunner:
         worker = threading.Thread(target=work, daemon=True)
         worker.start()
 
+        announced = False
         if notice and delay <= 0:
             # Always slow: announce before waiting. join(0) would race the
             # worker and skip the notice whenever it finished first.
             progress.note(notice)
-        else:
-            worker.join(delay)
-            if worker.is_alive() and notice:
-                progress.note(notice)
+            announced = True
 
+        self._watch(worker, thread_id, progress, notice, delay, announced)
         worker.join()
 
         if "error" in box:
             raise box["error"]
         return box["value"]
+
+    def _watch(self, worker, thread_id: str, progress, notice: str,
+               delay: float, announced: bool) -> None:
+        """Wait for the run, announcing it and saying what it is working on.
+
+        One loop rather than two waits: the approval cards used to be the only
+        sign of life, and once routine steps stopped asking, a deep analysis
+        became minutes of silence.
+        """
+        deadline = time.monotonic() + delay
+        readable = True
+        while worker.is_alive():
+            worker.join(self._step_every)
+            if not worker.is_alive():
+                break
+            if notice and not announced and time.monotonic() >= deadline:
+                progress.note(notice)
+                announced = True
+            if not readable:
+                continue
+            try:
+                step = current_step(self._agent.get_state(self._config(thread_id)))
+            except Exception as exc:            # reading state must not matter
+                print(f"[progress] {exc}")
+                readable = False
+                continue
+            if step:
+                progress.step(step)

@@ -67,8 +67,11 @@ class FakeTask:
 
 
 class FakeState:
-    def __init__(self, tasks):
+    def __init__(self, tasks, values=None):
         self.tasks = tuple(tasks)
+        # The real StateSnapshot exposes the graph state here; `todos` is what
+        # the progress reporter reads to say what the run is working on.
+        self.values = values or {}
 
 
 class FakeAgent:
@@ -83,6 +86,7 @@ class FakeAgent:
         self.invocations: list[tuple] = []
         self.delay: float = 0.0
         self.error: BaseException | None = None
+        self.todos: list[dict] = []
         # Per thread, like the real checkpointer: a new conversation must not
         # inherit the interrupt another one is paused on.
         self._paused: dict[str | None, list] = {}
@@ -105,7 +109,8 @@ class FakeAgent:
     def get_state(self, config):
         thread = self._thread_of(config)
         interrupts = self._paused[thread] if thread in self._paused             else self._paused.get(None, [])
-        return FakeState([FakeTask(interrupts)] if interrupts else [])
+        return FakeState([FakeTask(interrupts)] if interrupts else [],
+                         values={"todos": self.todos})
 
     @property
     def pending(self) -> list:
@@ -222,12 +227,20 @@ class FakeProgress:
     def __init__(self):
         self.busy_calls = 0
         self.notes: list[str] = []
+        self.steps: list[str] = []
+        self.finished = 0
 
     def busy(self) -> None:
         self.busy_calls += 1
 
     def note(self, message: str) -> None:
         self.notes.append(message)
+
+    def step(self, message: str) -> None:
+        self.steps.append(message)
+
+    def done(self) -> None:
+        self.finished += 1
 
 
 # --------------------------------------------------------------------------
@@ -287,7 +300,8 @@ def progress():
 def runner(graph, progress):
     from analyst.agent.runner import AgentRunner
     # 50ms rather than 4s: the tests assert on the announcement, not on waiting.
-    return AgentRunner(graph, progress=progress, announce_after=0.05)
+    return AgentRunner(graph, progress=progress, announce_after=0.05,
+                       step_every=0.01)
 
 
 @pytest.fixture

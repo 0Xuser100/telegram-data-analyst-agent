@@ -21,6 +21,11 @@ MEDIA_GROUP_MAX = 10
 PHOTO_MAX_BYTES = 10 * 1024 * 1024
 
 
+def _message_id(result) -> int | None:
+    """The id Telegram assigns a sent message, when it gave us one."""
+    return result.get("message_id") if isinstance(result, dict) else None
+
+
 class TelegramError(RuntimeError):
     pass
 
@@ -91,26 +96,35 @@ class TelegramClient:
 
     # -- sending -----------------------------------------------------------
 
-    def send_message(self, chat_id: int, text: str, markdown: bool = True) -> None:
+    def send_message(self, chat_id: int, text: str,
+                     markdown: bool = True) -> int | None:
         """Send text, rendering Markdown where Telegram allows it.
 
         Falls back to plain text if the markup is rejected: an unparseable reply
         must still reach the user.
+
+        Returns the id of the last message sent, which is what lets a status
+        line be edited later. A long reply is split, so only the last id is
+        meaningful; callers that edit send short messages.
         """
+        message_id = None
         for chunk in chunk_text(text or "(empty reply)"):
             if markdown:
                 try:
-                    self._call(
+                    sent = self._call(
                         "sendMessage",
                         chat_id=chat_id,
                         text=to_html(chunk),
                         parse_mode="HTML",
                         link_preview_options={"is_disabled": True},
                     )
+                    message_id = _message_id(sent) or message_id
                     continue
                 except TelegramError as exc:
                     print(f"[html] falling back to plain text: {exc}")
-            self._call("sendMessage", chat_id=chat_id, text=chunk)
+            sent = self._call("sendMessage", chat_id=chat_id, text=chunk)
+            message_id = _message_id(sent) or message_id
+        return message_id
 
     def send_html(self, chat_id: int, html_text: str, keyboard: list | None = None) -> None:
         """Send text that is already HTML, optionally with inline buttons."""
@@ -168,6 +182,15 @@ class TelegramClient:
 
     def send_document(self, chat_id: int, path: str, caption: str | None = None) -> None:
         self._upload(chat_id, "sendDocument", "document", path, caption or "")
+
+    def edit_message(self, chat_id: int, message_id: int, text: str) -> None:
+        """Replace the text of a message already sent."""
+        self._call("editMessageText", chat_id=chat_id, message_id=message_id,
+                   text=text, timeout=10)
+
+    def delete_message(self, chat_id: int, message_id: int) -> None:
+        self._call("deleteMessage", chat_id=chat_id, message_id=message_id,
+                   timeout=10)
 
     def send_typing(self, chat_id: int) -> None:
         """Instant feedback that the message landed, which is what lets the

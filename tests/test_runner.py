@@ -214,3 +214,40 @@ def test_a_stuck_run_gives_up(runner, graph):
     with pytest.raises(TooManyApprovals):
         run_to_completion(runner, THREAD, "analyse this", AlwaysApproves(), max_rounds=3)
     assert len(graph.invocations) == 4          # the start plus three resumes
+
+
+# --------------------------------------------------------------------------
+# saying what the run is working on
+# --------------------------------------------------------------------------
+
+def test_the_current_plan_item_is_reported(runner, graph, progress):
+    """The agent's own words about the actual analysis, not a step counter --
+    "checking whether State mixes totals with detail" means something to a
+    reader; "step 12" does not."""
+    graph.todos = [
+        {"content": "inspect the columns", "status": "completed"},
+        {"content": "check for aggregate rows", "status": "in_progress"},
+    ]
+    graph.delay = 0.05
+    runner.start(THREAD, "analyse this", progress=progress)
+    assert "check for aggregate rows" in progress.steps
+
+
+def test_nothing_is_reported_before_a_plan_exists(runner, graph, progress):
+    graph.todos = []
+    graph.delay = 0.05
+    runner.start(THREAD, "analyse this", progress=progress)
+    assert progress.steps == []
+
+
+def test_a_failure_to_read_the_plan_does_not_fail_the_run(runner, graph, progress):
+    """Progress is cosmetic; the analysis is not."""
+    class Exploding:
+        def get_state(self, config):
+            raise RuntimeError("checkpointer unavailable")
+
+        def invoke(self, payload, config=None):
+            return ai_result("done")
+
+    result = AgentRunner(Exploding(), progress=progress).start(THREAD, "x")
+    assert result["messages"][-1].content == "done"

@@ -401,3 +401,35 @@ def test_the_details_button_does_not_touch_the_trace(router, graph, tracer):
     router.handle_callback(callback_update("details"))
 
     assert (len(tracer.attached_to), len(tracer.finished)) == before
+
+
+def test_the_status_line_is_cleared_before_the_answer(client, graph, threads):
+    """A stale "computing shares…" line left above a finished analysis reads as
+    an error. The reporter that wrote the line has to be the one that clears
+    it, so the router must hold one per turn rather than make a fresh one."""
+    from conftest import FakeProgress
+    from analyst.agent.runner import AgentRunner
+    from analyst.conversation.delivery import ResultDelivery
+    from analyst.conversation.router import UpdateRouter
+    from analyst.plumbing.artifacts import ArtifactCollector
+
+    reporters = []
+
+    def make_reporter(chat_id):
+        reporters.append(FakeProgress())
+        return reporters[-1]
+
+    router = UpdateRouter(
+        client=client,
+        runner=AgentRunner(graph, step_every=0.01),
+        threads=threads,
+        delivery=ResultDelivery(client, ArtifactCollector(output_dir="./output")),
+        allowed_chats={ALLOWED_CHAT},
+        upload_task_template="{file_path}",
+        progress_for=make_reporter)
+
+    graph.results = [ai_result("**Heart disease leads**")]
+    router.handle_message(text_update("analyse it"))
+
+    assert len(reporters) == 1
+    assert reporters[0].finished == 1
