@@ -16,9 +16,20 @@ from analyst.plumbing.progress import Progress, SilentProgress
 # about a second, and announcing first turned every reply into two messages.
 ANNOUNCE_AFTER = 4.0
 
+# A graph-level backstop for a loop the middleware limits cannot see. deepagents
+# sets 9_999, which is a ceiling in name only. This sits far above the per-run
+# middleware bounds so those are always what actually fires.
+RECURSION_LIMIT = 200
+
+# A measured single-pass analysis needs 15 rounds, so the old default of 12
+# stopped work that was going fine. After the approval policy narrowed, most
+# rounds disappear and this is a backstop rather than a live constraint.
+MAX_APPROVAL_ROUNDS = 40
+
 
 def run_to_completion(runner: "AgentRunner", thread_id: str, task,
-                      approver, max_rounds: int = 12, **kwargs) -> dict:
+                      approver, max_rounds: int = MAX_APPROVAL_ROUNDS,
+                      **kwargs) -> dict:
     """Run a task to the end, asking `approver` at every gate.
 
     The loop is the same whoever is deciding — a person at a prompt, or a test
@@ -78,7 +89,11 @@ class AgentRunner:
                 metadata: dict | None = None) -> dict:
         """`run_name` and `metadata` are what LangSmith shows in the trace list.
         Without them every row is called "LangGraph"."""
-        config: dict = {"configurable": {"thread_id": str(thread_id)}}
+        # recursion_limit is read from the top level. Nested inside
+        # `configurable` it is silently ignored, which looks exactly like
+        # working.
+        config: dict = {"configurable": {"thread_id": str(thread_id)},
+                        "recursion_limit": RECURSION_LIMIT}
         if run_name:
             config["run_name"] = run_name
         if metadata:

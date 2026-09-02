@@ -23,7 +23,16 @@ def test_build_model_uses_the_configured_model(mod):
     from langchain_openai import ChatOpenAI
     model = mod.build_model()
     assert isinstance(model, ChatOpenAI)
-    assert model.model_name == "gpt-4.1-mini-2025-04-14"
+    assert model.model_name == "gpt-5.6-luna"
+
+
+def test_the_model_is_reached_through_the_responses_api(mod):
+    """gpt-5.x rejects function tools on /v1/chat/completions while a
+    reasoning effort is in play, and langchain-openai sends that key whatever
+    we do. The Responses API is the fix that keeps reasoning switched on;
+    reasoning_effort="none" also clears the error but by disabling the
+    reasoning we changed model for."""
+    assert mod.build_model().use_responses_api is True
 
 
 def test_the_key_is_passed_explicitly(mod):
@@ -139,6 +148,33 @@ def test_reads_are_not_gated(mod):
     """Read-only tools must not ask, or every run turns into button-tapping."""
     assert mod.INTERRUPT_ON["read_file"] is False
     assert mod.INTERRUPT_ON["ls"] is False
+
+
+# --------------------------------------------------------------------------
+# run bounds
+# --------------------------------------------------------------------------
+
+def test_a_run_is_bounded_by_model_calls(stack):
+    """Nothing bounded a run before: deepagents sets recursion_limit to 9_999,
+    and the CLI's own cap is not on the bot's path at all."""
+    limiter = next(m for m in stack if m.name == "ModelCallLimitMiddleware")
+    assert limiter.run_limit == 40
+    assert limiter.thread_limit is None         # follow-ups share a thread
+
+
+def test_repeated_execution_is_bounded_separately(stack):
+    """A script that keeps failing must not eat the whole model-call budget."""
+    limiter = next(m for m in stack
+                   if m.name.startswith("ToolCallLimitMiddleware"))
+    assert limiter.run_limit == 15
+    assert limiter.thread_limit is None
+
+
+def test_a_bounded_run_answers_instead_of_raising(stack):
+    """The measured run that would have been killed by the old cap produced
+    the correct analysis, so a bound must return what it has."""
+    limiter = next(m for m in stack if m.name == "ModelCallLimitMiddleware")
+    assert limiter.exit_behavior == "end"
 
 
 # --------------------------------------------------------------------------

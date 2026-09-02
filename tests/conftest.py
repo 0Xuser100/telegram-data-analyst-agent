@@ -18,7 +18,7 @@ os.environ.update({
     "LANGSMITH_API_KEY": "lsv2_pt_test",
     "LANGSMITH_PROJECT": "test-project",
     "OPENAI_API_KEY": "sk-test-not-a-real-key",
-    "OPENAI_MODEL": "gpt-4.1-mini-2025-04-14",
+    "OPENAI_MODEL": "gpt-5.6-luna",
     "TELEGRAM_BOT_TOKEN": "123456:TEST-token",
     "TELEGRAM_ALLOWED_CHAT_IDS": "555,777",
     "TELEGRAM_POLL_TIMEOUT": "1",

@@ -12,7 +12,11 @@ from deepagents.middleware.summarization import (
     SummarizationMiddleware,
     compute_summarization_defaults,
 )
-from langchain.agents.middleware import TodoListMiddleware
+from langchain.agents.middleware import (
+    ModelCallLimitMiddleware,
+    TodoListMiddleware,
+    ToolCallLimitMiddleware,
+)
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.sqlite import SqliteSaver
 
@@ -29,6 +33,15 @@ OUTPUT_DIR = "./output"
 COMPACT_AT_TOKENS = 40_000
 KEEP_MESSAGES = 6
 
+# What bounds one run. Nothing did before: deepagents sets recursion_limit to
+# 9_999, and the CLI's own round cap never sat on the bot's path. A measured
+# single-pass analysis on this model takes 15 approval rounds and 29 tool
+# calls, so these leave real headroom and only a stuck agent reaches them.
+# Both are per-run, never per-thread: follow-up questions share a thread, and
+# a thread-scoped budget would strangle a long conversation.
+MODEL_CALLS_PER_RUN = 40
+EXECUTIONS_PER_RUN = 15
+
 # Which tools stop and ask. Read-only tools do not, or every run turns into a
 # button-tapping session.
 INTERRUPT_ON = {
@@ -43,7 +56,16 @@ def build_model(settings=None) -> ChatOpenAI:
     """The key is passed explicitly: pydantic-settings reads .env without
     exporting to os.environ, so ChatOpenAI's own lookup would miss it."""
     settings = settings or get_settings()
-    return ChatOpenAI(model=settings.OPENAI_MODEL, api_key=settings.OPENAI_API_KEY)
+    return ChatOpenAI(
+        model=settings.OPENAI_MODEL,
+        api_key=settings.OPENAI_API_KEY,
+        # gpt-5.x refuses function tools on /v1/chat/completions whenever a
+        # reasoning effort is in play, and langchain-openai sends that key
+        # whatever we pass. Without this the first tool call fails outright.
+        # reasoning_effort="none" silences it too, by switching off the
+        # reasoning we changed model for — so: the Responses API.
+        use_responses_api=True,
+    )
 
 
 def build_checkpointer(db_path: str = CHECKPOINT_DB) -> SqliteSaver:
@@ -83,6 +105,17 @@ def build_agent(model=None, checkpointer=None, target_backend=None, summarizer=N
         system_prompt=SYSTEM_RULES.format(python_path=python_path, output_dir=output_dir),
         interrupt_on=INTERRUPT_ON,
         middleware=[TodoListMiddleware(),
+                    # `end` rather than `error`: the measured run that the old
+                    # cap would have killed had produced the right analysis.
+                    # A bounded run answers with what it has.
+                    ModelCallLimitMiddleware(run_limit=MODEL_CALLS_PER_RUN,
+                                             exit_behavior="end"),
+                    # `continue` feeds "do not call execute again" back to the
+                    # model, so a script stuck in fix-rerun-fail stops burning
+                    # the budget without losing the run.
+                    ToolCallLimitMiddleware(tool_name="execute",
+                                            run_limit=EXECUTIONS_PER_RUN,
+                                            exit_behavior="continue"),
                     summarizer or build_summarizer(model, target_backend)],
     )
 

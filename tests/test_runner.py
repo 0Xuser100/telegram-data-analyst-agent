@@ -191,6 +191,23 @@ def test_one_decision_per_pending_action(runner, graph):
     assert graph.invocations[-1][0].resume["decisions"] == [{"type": "approve"}] * 2
 
 
+def test_the_recursion_backstop_is_a_top_level_config_key(runner, graph):
+    """LangGraph reads recursion_limit from the top level. Nested inside
+    `configurable` it is silently ignored, which looks identical to working."""
+    runner.start(THREAD, "analyse this")
+    config = graph.invocations[-1][1]
+    assert config["recursion_limit"] == 200
+    assert "recursion_limit" not in config["configurable"]
+
+
+def test_the_default_round_cap_clears_a_real_analysis(runner, graph):
+    """A measured single-pass run on the current model needed 15 rounds; the
+    old default of 12 killed work that was going fine."""
+    graph.results = [interrupt_result(EXECUTE_ACTION)] * 20 + [ai_result("done")]
+    result = run_to_completion(runner, THREAD, "analyse this", AlwaysApproves())
+    assert result["messages"][-1].content == "done"
+
+
 def test_a_stuck_run_gives_up(runner, graph):
     """Money, not patience: an agent that keeps asking must be stopped."""
     graph.results = [interrupt_result(EXECUTE_ACTION)] * 20

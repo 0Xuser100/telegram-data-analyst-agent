@@ -14,7 +14,7 @@ BASE = {
 }
 
 
-BASE_WITH_MODEL = {**BASE, "OPENAI_MODEL": "gpt-4.1-mini-2025-04-14"}
+BASE_WITH_MODEL = {**BASE, "OPENAI_MODEL": "gpt-5.6-luna"}
 
 # conftest sets these for the whole suite, and pydantic-settings reads env vars
 # even with _env_file=None, so a test about a missing value must clear them.
