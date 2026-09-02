@@ -9,7 +9,7 @@ You can use it from the terminal or from a Telegram chat.
 Built with [Deep Agents](https://docs.langchain.com/oss/python/deepagents) and
 LangChain, based on the
 [data analysis tutorial](https://docs.langchain.com/oss/python/deepagents/data-analysis).
-Runs on OpenAI `gpt-4.1-mini-2025-04-14`.
+Runs on OpenAI `gpt-5.6-luna`.
 
 ## Documentation
 
@@ -70,8 +70,9 @@ solves the task the way a person would: write a script, run it, read the output.
   you get:  a short summary  +  the chart image
 ```
 
-If the script fails, the agent reads the error, fixes the script, and asks to run
-it again. A real run is usually two to four approvals.
+If the script fails, the agent reads the error, fixes the script, and runs it
+again. Routine steps inside `output/` do not ask; a measured run stops for
+nothing at all unless it strays outside that shape.
 
 ---
 
@@ -174,7 +175,8 @@ Then open `.env` and fill it in:
 | Setting | Needed? | What it is |
 |---|---|---|
 | `OPENAI_API_KEY` | yes | Your OpenAI key. |
-| `OPENAI_MODEL` | yes | The model to use. This project uses `gpt-4.1-mini-2025-04-14`. |
+| `OPENAI_MODEL` | yes | The model to use. This project uses `gpt-5.6-luna`. |
+| `ANALYST_AUTO_APPROVE` | no | `true` by default. `false` puts every write and command back behind an approval card. |
 | `LANGSMITH_*` | yes | Tracing. Set `LANGSMITH_TRACING=false` if you do not want it. |
 | `TELEGRAM_BOT_TOKEN` | only for Telegram | From [@BotFather](https://t.me/BotFather). |
 | `TELEGRAM_ALLOWED_CHAT_IDS` | only for Telegram | Chat ids allowed to use the bot. Empty means nobody. |
@@ -289,15 +291,16 @@ rules for both entry points. The agent picks the chart from a menu (line, bar,
 pie, scatter, histogram, box, heatmap and more) based on what the columns look
 like, so the picture follows the data.
 
-**What needs approval** — edit `interrupt_on` in `agent/builder.py`:
+**What needs approval** — edit `agent/policy.py`, which decides what counts as
+a routine step, and `build_interrupt_on` in `agent/builder.py`, which turns
+those decisions into approval rules:
 
 ```python
-interrupt_on={
-    "execute": True,       # ask before running commands
-    "write_file": True,    # ask before writing files
-    "read_file": False,    # never ask
-    "ls": False,           # never ask
-}
+# agent/policy.py
+OUTPUT_DIR = "./output"                    # writes here need no card
+SENSITIVE = (".env", "checkpoints.sqlite", ".git", ".venv")   # reads here do
+is_routine_execute(request)   # the pinned interpreter, one .py, under output/
+is_routine_write(request)     # a write that lands under output/
 ```
 
 **The data to analyse** (terminal version) — edit the paths in `entrypoints/cli.py`.
@@ -337,7 +340,17 @@ value object, repository — are listed with their reasons and their tests in
 The agent runs real commands on your computer with your permissions. There is no
 sandbox. Two rules follow from that:
 
-- **Read each approval before you tap it.** That is the real protection.
+- **Routine analysis steps no longer ask, and that is a real tradeoff.** A
+  script written into `output/` and run with the pinned interpreter proceeds
+  without a card, because a ten-step analysis behind ten taps is unusable. The
+  check constrains the *command*; it says nothing about what the *script* does,
+  and that script is arbitrary Python the model wrote. So the real protection
+  is not the approval card any more — it is that you trust the model and you
+  own the machine. Set `ANALYST_AUTO_APPROVE=false` to put every step back
+  behind a card.
+- **Read the approvals you do get.** Anything outside that one routine shape —
+  a write elsewhere, a command of any other form, a read of `.env` — still
+  stops and asks.
 - **`TELEGRAM_ALLOWED_CHAT_IDS` is required.** Anyone can find a bot by its
   username, so the bot ignores every chat that is not on the list, and refuses to
   start when the list is empty.
