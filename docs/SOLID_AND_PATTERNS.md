@@ -107,7 +107,7 @@ ArtifactCollector(output_dir="./output", clock=time.time)
 ```
 
 `build_bot()` in `entrypoints/bot.py` is the single composition root — the only
-function that knows every concrete class. That inversion is what makes 442 tests
+function that knows every concrete class. That inversion is what makes 554 tests
 run with no network, no API key, and no model: the tests do the wiring instead.
 
 Even the clock is injected, so chart-discovery tests are deterministic
@@ -335,4 +335,4 @@ or a real coupling. Otherwise it is a layer to read past.
 | A restart re-attaches to the same trace | `test_a_resume_after_a_restart_finds_the_same_parent` |
 | Tracing never breaks a run | `test_a_failure_to_open_is_swallowed` |
 
-442 offline tests, ~12 seconds, 99% line coverage, no network and no model calls.
+554 offline tests, ~12 seconds, 99% line coverage, no network and no model calls.

@@ -127,7 +127,8 @@ because it can.
 | Decision | Why | Alternative rejected |
 |---|---|---|
 | The agent gets a shell, not custom tools | any file shape works, and the code is inspectable | a fixed set of analysis tools: brittle, and every new question needs new code |
-| Human approval on write and run | model-generated code runs on this machine | trusting the model, or a sandbox (worth doing later) |
+| Approval narrowed to a scope control | a ten-step analysis behind ten taps is unusable, so routine steps in `output/` no longer ask | keeping every step gated (unusable), or a real sandbox (sends your data off the machine) |
+| `execute` is unsandboxed and stays so | `subprocess.run(shell=True)` on this host, by design: the agent solves problems the way a person would | a hosted sandbox — correct for untrusted input, wrong for one trusted user on their own machine |
 | Checkpointer on disk | a button tapped tomorrow must still work | in-memory: a restart orphans every pending card |
 | A new file starts a new conversation | one chat reached 565k input tokens over three days | one endless thread, re-sent on every message |
 | Compaction at 40k tokens | the deepagents default (170k here) never fired | leaving it: cost grew until the context window did |
@@ -162,7 +163,8 @@ checkpoints.sqlite*` is the full reset.
 | Telegram rejects the markup | resent as plain text, buttons intact |
 | A handler raises | logged with a traceback, the chat is told, the loop continues |
 | The model errors | the exception reaches the loop, which reports it to the chat |
-| The agent keeps asking for approval | capped at 12 rounds, then it stops |
+| The agent keeps asking for approval | capped at 40 rounds, then it stops |
+| A run goes on too long | capped at 40 model calls and 15 executions per run; it answers with what it has and says it was cut short |
 | A reply claims a chart that does not exist | the bot says so instead of going quiet |
 | Context window exceeded | compaction fires and retries |
 | An unknown chat messages | dropped silently, logged locally |
@@ -178,16 +180,20 @@ Where it would need changing:
   interface is the same one line in `agent/builder.py`.
 - **Concurrent runs in one chat** — the router refuses a second run while one is
   paused. Lifting that needs per-run keys instead of per-chat ones.
-- **Untrusted users** — approval is a safeguard, not a sandbox. Swap
+- **Untrusted users** — approval is not a sandbox, and since routine steps
+  stopped asking it is not even a per-step review. `execute` runs
+  `subprocess.run(shell=True)` on this machine with no isolation, and the
+  approval predicate constrains the *command*, never the *contents* of the
+  script it runs. Swap
   `LocalShellBackend` for a sandbox backend.
 - **Long analyses** — everything is synchronous inside one update. A queue would
   be the next step.
 
 ## 9. What was verified, and how
 
-- 442 offline tests, ~12 seconds, 99% coverage. No network, no model calls, a
+- 554 offline tests, ~12 seconds, 99% coverage. No network, no model calls, a
   temp working directory. See [TESTING.md](TESTING.md).
-- One end-to-end test against the real API on `gpt-4.1-mini-2025-04-14`,
+- One end-to-end test against the real API on `gpt-5.6-luna`,
   opt-in with `RUN_E2E=1`. It approves every gate, then checks that a script was
   written, a real chart was saved, the totals are right, and the reply follows
   the format rules.

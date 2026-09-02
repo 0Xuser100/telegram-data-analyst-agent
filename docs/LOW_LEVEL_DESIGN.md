@@ -18,6 +18,8 @@ easy to get wrong. Signatures are current as of the code in this folder.
 | [`agent/builder.py`](#agentbuilderpy) | 100 | `build_model`, `build_checkpointer`, `build_summarizer`, `build_agent`, `thread_config` |
 | [`agent/runner.py`](#agentrunnerpy) | 114 | `AgentRunner`, `run_to_completion`, `TooManyApprovals` |
 | [`agent/pending.py`](#agentpendingpy) | 62 | `PendingAction`, `pending_actions`, `actions_in`, `decisions_for` |
+| [`agent/policy.py`](#agentpolicypy) | 118 | `PERMISSIONS`-free predicates: `is_routine_execute`, `is_routine_write`, `is_sensitive_read` |
+| [`agent/plan_visibility.py`](#agentplan_visibilitypy) | 51 | `PlanVisibilityMiddleware` |
 | [`conversation/approvals.py`](#conversationapprovalspy) | 188 | `Card`, `describes`, `describe`, `raw_args`, `TelegramApprover`, `ConsoleApprover` |
 | [`plumbing/artifacts.py`](#plumbingartifactspy) | 91 | `ArtifactCollector`, `mentioned_paths` |
 | [`conversation/delivery.py`](#conversationdeliverypy) | 72 | `ResultDelivery`, `final_text` |
@@ -80,7 +82,9 @@ Rules with a scar behind them:
 - **No `read_file` on a data file** — a 60-column CSV forced three compactions in
   five seconds. Write an inspect script instead: shape, dtypes, `head(10)`,
   `describe()` (transposed and capped for wide files), missing counts.
-- **No inline `python -c`, no heredoc** — the approval card shows a file; inline
+- **No inline `python -c`, no heredoc** — a file on disk stays reviewable after
+  the fact, and it is the only shape `is_routine_execute` will let through
+  without a card. Inline
   code hides what is about to run.
 - **`palette` without `hue`** is deprecated in seaborn and raises.
 - **No `plt.show()`** — it blocks forever headless.
@@ -200,6 +204,43 @@ decisions_for(choice, count) -> list[dict]           # the resume payload
 
 `decisions_for` builds one decision per pending action, in order: LangGraph
 resumes with a list, and a mismatched length silently drops an approval.
+
+## agent/policy.py
+
+Decides what runs without asking. Pure functions over the tool call, so the
+whole policy is testable without building a graph.
+
+`is_routine_execute(request)` auto-approves exactly one command shape: the
+pinned interpreter, one `.py` file, resolving inside `output/`. A whitelist,
+because blacklisting shell metacharacters is a game you lose. Anything
+unparseable returns False — the failure mode has to be asking, never running.
+
+`is_routine_write(request)` covers `write_file` and `edit_file` alike.
+`is_sensitive_read(request)` raises a card for `.env`, the checkpoint database,
+`.git` and `.venv`, which `read_file` reached silently before.
+
+Containment resolves paths rather than comparing strings, so `output/../x.py`
+is caught. That work would have belonged to `FilesystemPermission`, but
+deepagents refuses `permissions` alongside a backend that can execute commands
+— the only kind this app can use — so it is ours, and `interrupt_on` can only
+ask rather than refuse.
+
+**The honest sentence, repeated here because it matters:** this is a scope
+control, not a security control. `execute` is `subprocess.run(shell=True)` with
+no sandbox, and the predicate constrains the command, never the contents of the
+script it runs.
+
+## agent/plan_visibility.py
+
+`PlanVisibilityMiddleware` appends the agent's current todo list to the system
+prompt on every model call.
+
+`TodoListMiddleware` injects only a static prompt; the plan itself arrives as a
+tool result, which the summarizer evicts once a run gets long. `state["todos"]`
+survives that, but nothing read it back — so a long analysis forgot what it set
+out to do and finished something else. Re-attaching costs a few hundred tokens
+a turn and scales with run length, where a larger compaction budget only defers
+the failure.
 
 ## conversation/approvals.py
 

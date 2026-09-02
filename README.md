@@ -19,7 +19,7 @@ Runs on OpenAI `gpt-5.6-luna`.
 | [HIGH_LEVEL_DESIGN.md](docs/HIGH_LEVEL_DESIGN.md) | The architecture: layers, components, flows, decisions, failure behaviour |
 | [LOW_LEVEL_DESIGN.md](docs/LOW_LEVEL_DESIGN.md) | Module by module: every signature, and the details that are easy to get wrong |
 | [SOLID_AND_PATTERNS.md](docs/SOLID_AND_PATTERNS.md) | The principles and patterns used, with the test that keeps each one honest |
-| [TESTING.md](docs/TESTING.md) | How pytest works, then how the 442 tests here are built |
+| [TESTING.md](docs/TESTING.md) | How pytest works, then how the 554 tests here are built |
 
 ---
 
@@ -110,7 +110,7 @@ telegram-data-analyst-agent/
         ├── tracing.py          one LangSmith trace per task
         └── thread_store.py     which conversation each chat is on
 
-tests/          442 offline tests (see docs/TESTING.md)
+tests/          554 offline tests (see docs/TESTING.md)
 tests_e2e/      one real run against the real API
 docs/           the design docs (see the table at the top)
 data/           your input files
@@ -234,7 +234,7 @@ Bot commands: `/help`, and `/new` to start a fresh conversation.
 | `uv run analyst-cli` | One analysis in the terminal. |
 | `uv run analyst-bot` | Start the bot and keep it running. |
 | `uv run python -m analyst.plumbing.backend` | Recreate the sample CSV. |
-| `uv run pytest` | Run the 442 offline tests (about 12 seconds). |
+| `uv run pytest` | Run the 554 offline tests (about 12 seconds). |
 | `RUN_E2E=1 uv run pytest tests_e2e -v -s` | One real run against the API (costs a few cents). |
 
 ---
@@ -312,7 +312,7 @@ is_routine_write(request)     # a write that lands under output/
 ## Tests
 
 ```bash
-uv run pytest                              # 442 tests, ~12s, no network
+uv run pytest                              # 554 tests, ~12s, no network
 uv run pytest -m "not slow"                # skip the slowest module
 RUN_E2E=1 uv run pytest tests_e2e -v -s    # real API, real chart
 ```
@@ -326,7 +326,7 @@ your real `checkpoints.sqlite`, `data/` or `output/`. Details in [TESTING.md](do
 
 Each file has one job, the parts are passed in rather than imported, and
 `entrypoints/bot.py`'s `build_bot()` is the only place that knows all of them. That is why
-442 tests run with no network and no API key.
+554 tests run with no network and no API key.
 
 The shapes used — registry, strategy, adapter, decorator, null object, facade,
 value object, repository — are listed with their reasons and their tests in
