@@ -19,6 +19,24 @@ from langchain_core.messages import SystemMessage
 HEADING = "\n\nYOUR CURRENT PLAN (you wrote this; revise it as you learn):\n"
 
 
+def _text_of(message) -> str:
+    """The system prompt as text, whatever shape it arrived in.
+
+    Under the Responses API `content` is a list of blocks rather than a string,
+    so concatenating onto it raises. This is only reachable with a real model,
+    which is why it survived a green suite.
+    """
+    if message is None:
+        return ""
+    content = message.content
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(block.get("text", "") for block in content
+                       if isinstance(block, dict))
+    return str(content or "")
+
+
 def _render(todos) -> str:
     """One line per step, with its status. Anything malformed is skipped.
 
@@ -46,6 +64,6 @@ class PlanVisibilityMiddleware(AgentMiddleware):
         if not plan:
             return handler(request)         # a greeting pays nothing
 
-        existing = request.system_message.content if request.system_message else ""
+        existing = _text_of(request.system_message)
         return handler(request.override(
             system_message=SystemMessage(existing + HEADING + plan)))

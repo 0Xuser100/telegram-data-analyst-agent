@@ -193,6 +193,14 @@ def test_the_denominator_must_be_stated():
     assert "which denominator" in RENDERED
 
 
+def test_paths_must_be_relative():
+    """The model infers the project root from the interpreter path and writes
+    absolute paths. The backend rejects them, and the approval predicate
+    refuses them, so every write raised a card and the run died."""
+    assert "ALWAYS use relative paths" in FLAT
+    assert "never infer one from the interpreter path" in FLAT
+
+
 def test_a_follow_up_reads_the_findings_file():
     """Compaction has usually replaced the conversation by the time a
     follow-up arrives, so the file is the reliable record."""

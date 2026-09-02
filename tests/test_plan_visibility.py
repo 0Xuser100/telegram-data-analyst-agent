@@ -105,3 +105,24 @@ def test_messages_are_left_alone():
     history = [HumanMessage("analyse this")]
     seen = call({"todos": TODOS, "messages": history}, SystemMessage("x"))
     assert seen.state.get("messages") == history
+
+
+# --------------------------------------------------------------------------
+# the shape the prompt actually arrives in
+# --------------------------------------------------------------------------
+
+def test_a_block_style_system_prompt_is_handled():
+    """Under the Responses API -- which this project now uses -- content is a
+    list of blocks, not a string. Appending to it raised TypeError on every
+    real run while the whole offline suite stayed green, because every test
+    here built the message from a plain string."""
+    blocks = SystemMessage([{"type": "text", "text": "base rules"}])
+    seen = call({"todos": TODOS}, blocks)
+    text = seen.system_message.content
+    assert text.startswith("base rules")
+    assert "chart deaths by cause" in text
+
+
+def test_an_unexpected_content_shape_does_not_raise():
+    seen = call({"todos": TODOS}, SystemMessage([{"type": "image"}]))
+    assert "chart deaths by cause" in seen.system_message.content

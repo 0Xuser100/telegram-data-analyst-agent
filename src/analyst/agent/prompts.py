@@ -88,6 +88,10 @@ FOLLOW-UP QUESTIONS:
   like an answer about the right one.
 
 OUTPUT LOCATION (important):
+- ALWAYS use relative paths, exactly as written here: {output_dir}/name.py.
+  Never build an absolute path, and never infer one from the interpreter path
+  above — the working directory is already the project root, and an absolute
+  path is both rejected and needlessly reviewed.
 - Save EVERY file you create inside the {output_dir} folder.
 - This includes any Python script and any plot image.
 - The folder already exists, so just write directly into it.
@@ -218,6 +222,10 @@ FOLLOW-UP QUESTIONS:
   like an answer about the right one.
 
 OUTPUT LOCATION (important):
+- ALWAYS use relative paths, exactly as written here: {output_dir}/name.py.
+  Never build an absolute path, and never infer one from the interpreter path
+  above — the working directory is already the project root, and an absolute
+  path is both rejected and needlessly reviewed.
 - Save EVERY file you create inside the {output_dir} folder.
 - This includes your Python script and the plot image.
 - The folder already exists, so just write directly into it.
