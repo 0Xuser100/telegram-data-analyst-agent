@@ -54,6 +54,18 @@ SENSITIVE = (".env", ".env.example", "checkpoints.sqlite", ".git", ".venv")
 
 
 def _resolve(path: str) -> str:
+    """A tool's path argument as a real filesystem path.
+
+    deepagents runs its backend in virtual mode: a leading "/" means the
+    backend root, not the drive root, and the `write_file` schema tells the
+    model its path "must be absolute". Passing that straight to `os.path.join`
+    discards the working directory -- `join(cwd, "/output/a.py")` is
+    `D:/output/a.py` -- so containment failed and every routine write raised a
+    card, which is the whole thing this module exists to avoid.
+    """
+    path = path.replace("\\", "/")
+    if path.startswith("/"):
+        path = path.lstrip("/")
     return os.path.realpath(os.path.join(os.getcwd(), path))
 
 

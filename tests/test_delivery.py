@@ -249,3 +249,46 @@ def test_more_figures_than_one_group_all_arrive(delivery, client, clean_output):
 
     delivered = sum(len(paths) for _, paths in client.groups) + len(client.photos)
     assert delivered == total
+
+
+def follow_up(text, ran_script=True):
+    """A second question in the same conversation."""
+    from langchain_core.messages import HumanMessage
+    first = AIMessage("")
+    first.tool_calls = [{"name": "execute", "args": {}, "id": "1"}]
+    second = AIMessage("")
+    second.tool_calls = [{"name": "execute", "args": {}, "id": "2"}]
+    messages = [HumanMessage("analyse this"), first, AIMessage("first answer"),
+                HumanMessage("which state was highest?")]
+    if ran_script:
+        messages.append(second)
+    messages.append(AIMessage(text))
+    return {"messages": messages}
+
+
+def test_a_follow_up_that_runs_a_script_without_drawing_is_not_flagged(
+        delivery, client, clean_output):
+    """The prompt tells the agent to compute a missing number with a script and
+    answer in prose. That correct behaviour must not be reported as a failure
+    telling the user to redo work that succeeded."""
+    delivery.start_run(CHAT)
+    delivery.deliver(CHAT, follow_up("Texas, at 12.4%."))
+    assert not client.said("produced no chart")
+
+
+def test_a_truncated_run_relays_the_analysis_not_the_internal_message(
+        delivery, client, clean_output):
+    """ModelCallLimitMiddleware jumps to the end before the model call, so the
+    agent never gets a turn to explain itself and its own message is last.
+    Relaying that hands the user "Model call limits exceeded: run limit
+    (40/40)" instead of their analysis."""
+    from analyst.conversation.delivery import LIMIT_PREFIX
+    delivery.start_run(CHAT)
+    delivery.deliver(CHAT, {"messages": [
+        AIMessage("**Heart disease leads at 33.7%**"),
+        AIMessage(f"{LIMIT_PREFIX}: run limit (40/40)"),
+    ]})
+
+    assert client.said("Heart disease leads")
+    assert not client.said("Model call limits exceeded")
+    assert client.said("stopped early")

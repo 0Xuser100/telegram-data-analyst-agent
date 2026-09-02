@@ -17,6 +17,39 @@ def _batched(items: list, size: int) -> list[list]:
 NO_TEXT_REPLY = "Done, but the agent produced no text reply."
 
 
+# What ModelCallLimitMiddleware appends when a run is cut short. It jumps to
+# the end *before* the model call, so the agent never gets a turn to explain
+# itself and this becomes the last AI message -- which is what the user would
+# otherwise be handed instead of their analysis.
+LIMIT_PREFIX = "Model call limits exceeded"
+TRUNCATED_NOTICE = (
+    "⚠️ This run hit its step limit and stopped early, so the analysis above "
+    "is incomplete. Ask again to carry on from here."
+)
+
+
+def was_truncated(result: dict) -> bool:
+    for message in reversed(result.get("messages", []) or []):
+        if type(message).__name__ != "AIMessage":
+            continue
+        content = message.content
+        return isinstance(content, str) and content.startswith(LIMIT_PREFIX)
+    return False
+
+
+def is_a_follow_up(result: dict) -> bool:
+    """True when the user has asked more than once in this conversation.
+
+    The figure floor applies to a first analysis, to earn trust in it. The
+    prompt tells the agent not to redraw for follow-ups, and to compute a
+    missing number with a script -- so a follow-up that runs a script and
+    answers in prose is correct, and must not be warned about.
+    """
+    humans = sum(1 for message in result.get("messages", []) or []
+                 if type(message).__name__ == "HumanMessage")
+    return humans > 1
+
+
 def ran_an_analysis(result: dict) -> bool:
     """True when THIS turn executed something.
 
@@ -79,8 +112,18 @@ class ResultDelivery:
             return
 
         text = final_text(result)
+        truncated = was_truncated(result)
+        if truncated:
+            # Skip the middleware's own message and relay the last real answer.
+            text = final_text({"messages": (result.get("messages") or [])[:-1]})
         self._client.send_message(chat_id, text or NO_TEXT_REPLY)
-        self.send_images(chat_id, text, analysed=ran_an_analysis(result))
+        if truncated:
+            self._client.send_message(chat_id, TRUNCATED_NOTICE)
+        self.send_images(
+            chat_id, text,
+            analysed=(ran_an_analysis(result)
+                      and not is_a_follow_up(result)
+                      and not truncated))
 
     def send_images(self, chat_id: int, text: str, analysed: bool = False) -> None:
         """Upload the figures, then warn if none arrived from a real analysis.

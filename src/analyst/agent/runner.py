@@ -181,8 +181,13 @@ class AgentRunner:
             # run that ends between the two.
             remaining = deadline - time.monotonic()
             wait = self._step_every
-            if not announced and 0 < remaining < wait:
-                wait = remaining
+            if not announced and remaining < wait:
+                # Clamped whenever the notice is still pending, not only when
+                # it is close: otherwise the first status line is posted at
+                # step_every and the notice arrives after it, which is the
+                # every-reply-becomes-two-messages problem ANNOUNCE_AFTER
+                # exists to prevent.
+                wait = max(remaining, 0)
             worker.join(wait)
             if notice and not announced and time.monotonic() >= deadline:
                 progress.note(notice)

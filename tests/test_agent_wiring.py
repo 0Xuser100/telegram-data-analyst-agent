@@ -191,3 +191,12 @@ def test_the_module_exposes_a_ready_agent(mod):
     assert mod.agent is not None
     assert mod.model is not None
     assert mod.checkpointer is not None
+
+
+def test_destructive_and_delegating_tools_always_ask(mod):
+    """The backend exposes `delete` and `task` as well as the write tools.
+    Neither is ever routine: an analysis has no reason to remove a file, and
+    losing the user's data is not fixed by re-running."""
+    rules = mod.build_interrupt_on(auto_approve=True)
+    assert rules["delete"] is True
+    assert rules["task"] is True

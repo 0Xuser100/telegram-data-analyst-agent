@@ -64,6 +64,12 @@ INTERRUPT_ON = {
     "execute": True,       # pause before running commands
     "write_file": True,    # pause before writing files
     "edit_file": True,     # an edit is a write
+    # Never routine, and never auto-approved: the backend exposes `delete`, an
+    # analysis has no reason to remove anything, and losing the user's data
+    # file is not recoverable by re-running. `task` spawns a sub-agent, which
+    # the prompt forbids -- the tool is still there, so gate it too.
+    "delete": True,
+    "task": True,
     "read_file": False,    # no pause
     "ls": False,           # no pause
 }

@@ -217,3 +217,31 @@ def test_a_configured_interpreter_is_honoured():
 
     assert policy.is_routine_execute(Run(), python_path="/usr/bin/python3") is True
     assert policy.is_routine_execute(Run()) is False
+
+
+# --------------------------------------------------------------------------
+# the path shape the tool schema actually asks for
+# --------------------------------------------------------------------------
+
+@pytest.mark.parametrize("path", ["/output/01_quality.py", "/output/sub/a.png"])
+def test_a_backend_absolute_path_is_still_routine(path):
+    """deepagents runs its backend in virtual mode, where a leading "/" means
+    the backend root -- and the write_file schema tells the model its path
+    "must be absolute". os.path.join(cwd, "/output/a.py") discards the cwd, so
+    containment failed and every routine write raised a card."""
+    class Write:
+        tool_call = {"name": "write_file", "args": {"file_path": path}}
+    assert policy.is_routine_write(Write()) is True
+
+
+def test_a_backend_absolute_path_outside_the_workspace_still_asks():
+    class Write:
+        tool_call = {"name": "write_file", "args": {"file_path": "/secrets.py"}}
+    assert policy.is_routine_write(Write()) is False
+
+
+def test_a_backend_absolute_script_is_still_routine():
+    class Run:
+        tool_call = {"name": "execute",
+                     "args": {"command": f"{PY} /output/01_inspect.py"}}
+    assert policy.is_routine_execute(Run()) is True

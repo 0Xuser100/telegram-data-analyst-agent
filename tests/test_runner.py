@@ -262,3 +262,16 @@ def test_the_notice_is_not_delayed_to_the_next_poll(graph, progress):
                          step_every=5.0)
     runner.start(THREAD, "analyse this")
     assert progress.notes == ["Working on it…"]
+
+
+def test_the_notice_comes_before_the_first_status_line(graph, progress):
+    """The status poll used to fire at step_every, before the notice landed at
+    announce_after -- so a 2-4s run got a status message during exactly the
+    quiet period ANNOUNCE_AFTER exists to protect."""
+    graph.todos = [{"content": "inspecting the columns", "status": "in_progress"}]
+    graph.delay = 0.3
+    runner = AgentRunner(graph, progress=progress, announce_after=0.05,
+                         step_every=0.15)
+    runner.start(THREAD, "analyse this")
+    assert progress.notes == ["Working on it…"]
+    assert progress.steps                       # the status line still arrives
