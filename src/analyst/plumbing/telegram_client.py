@@ -7,11 +7,15 @@ charts, so everything above it can be tested without a network.
 so an async SDK would buy nothing.
 """
 
+import json
 import os
 
 import requests
 
 from analyst.plumbing.formatting import chunk_text, strip_html, to_html
+
+# Telegram caps one media group at ten items.
+MEDIA_GROUP_MAX = 10
 
 # sendPhoto's documented ceiling; larger files must go as documents.
 PHOTO_MAX_BYTES = 10 * 1024 * 1024
@@ -129,6 +133,38 @@ class TelegramClient:
             self._upload(chat_id, "sendDocument", "document", path, caption)
         else:
             self._upload(chat_id, "sendPhoto", "photo", path, caption)
+
+    def send_media_group(self, chat_id: int, paths: list[str]) -> None:
+        """Several figures as one block, so an answer is one notification.
+
+        No captions: every figure carries its own title, and a caption under it
+        is a second title in a smaller font. Files too large for a photo cannot
+        travel in a group at all, so the caller filters those out first.
+        """
+        if not paths:
+            return
+        media, files = [], {}
+        handles = []
+        try:
+            for index, path in enumerate(paths[:MEDIA_GROUP_MAX]):
+                name = f"file{index}"
+                handle = open(path, "rb")
+                handles.append(handle)
+                files[name] = handle
+                media.append({"type": "photo", "media": f"attach://{name}"})
+            resp = requests.post(
+                f"{self._api}/sendMediaGroup",
+                data={"chat_id": chat_id, "media": json.dumps(media)},
+                files=files,
+                timeout=180,
+            )
+        finally:
+            for handle in handles:
+                handle.close()
+        body = resp.json()
+        if not body.get("ok"):
+            raise TelegramError(
+                f"sendMediaGroup failed: {body.get('description', body)}")
 
     def send_document(self, chat_id: int, path: str, caption: str | None = None) -> None:
         self._upload(chat_id, "sendDocument", "document", path, caption or "")

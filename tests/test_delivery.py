@@ -136,3 +136,84 @@ def test_forget_clears_what_was_already_sent(delivery, client, clean_output):
     delivery.start_run(CHAT)
     delivery.send_images(CHAT, "")
     assert len(client.photos) == 2
+
+
+# --------------------------------------------------------------------------
+# several figures
+# --------------------------------------------------------------------------
+
+def figure(directory, name, size=1024):
+    path = os.path.join(directory, name)
+    with open(path, "wb") as fh:
+        fh.write(b"x" * size)
+    return path
+
+
+def test_several_figures_arrive_as_one_block(delivery, client, clean_output):
+    """Five separate uploads means five notifications, which buries the
+    message they belong to."""
+    delivery.start_run(CHAT)
+    for name in ("01_quality.png", "02_by_cause.png", "03_trend.png"):
+        figure(clean_output, name)
+    delivery.deliver(CHAT, analysed("Heart disease leads."))
+
+    assert len(client.groups) == 1
+    assert client.photos == []
+
+
+def test_the_block_is_in_reading_order(delivery, client, clean_output):
+    """Written out of order on purpose: the number is what fixes the order,
+    not the filesystem timestamp."""
+    delivery.start_run(CHAT)
+    for name in ("03_trend.png", "01_quality.png", "02_by_cause.png"):
+        figure(clean_output, name)
+    delivery.deliver(CHAT, analysed("Heart disease leads."))
+
+    names = [os.path.basename(p) for p in client.groups[0][1]]
+    assert names == ["01_quality.png", "02_by_cause.png", "03_trend.png"]
+
+
+def test_a_single_figure_does_not_need_a_block(delivery, client, clean_output):
+    delivery.start_run(CHAT)
+    figure(clean_output, "01_quality.png")
+    delivery.deliver(CHAT, analysed("Not much here."))
+
+    assert client.groups == []
+    assert len(client.photos) == 1
+
+
+def test_a_failed_block_falls_back_to_one_at_a_time(delivery, client, clean_output):
+    """Losing three figures because a group call failed would be worse than
+    three notifications."""
+    client.group_error = RuntimeError("group send failed")
+    delivery.start_run(CHAT)
+    for name in ("01_a.png", "02_b.png", "03_c.png"):
+        figure(clean_output, name)
+    delivery.deliver(CHAT, analysed("Heart disease leads."))
+
+    assert len(client.photos) == 3
+    assert client.said("Heart disease leads")
+
+
+def test_an_oversized_figure_travels_on_its_own(delivery, client, clean_output):
+    """A media group carries photos only, and send_photo falls back to a
+    document above the ceiling -- such a file cannot ride in the group."""
+    from analyst.plumbing.telegram_client import PHOTO_MAX_BYTES
+    delivery.start_run(CHAT)
+    figure(clean_output, "01_a.png")
+    figure(clean_output, "02_b.png")
+    figure(clean_output, "03_huge.png", size=PHOTO_MAX_BYTES + 1)
+    delivery.deliver(CHAT, analysed("Heart disease leads."))
+
+    grouped = [os.path.basename(p) for p in client.groups[0][1]]
+    assert grouped == ["01_a.png", "02_b.png"]
+    assert [os.path.basename(p) for _, p in client.photos] == ["03_huge.png"]
+
+
+def test_a_delivered_block_counts_as_images_for_the_warning(delivery, client, clean_output):
+    delivery.start_run(CHAT)
+    figure(clean_output, "01_a.png")
+    figure(clean_output, "02_b.png")
+    delivery.deliver(CHAT, analysed("Heart disease leads."))
+
+    assert not client.said("produced no chart")

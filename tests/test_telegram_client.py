@@ -1,5 +1,7 @@
 """The Telegram API wrapper. `requests` is patched, so nothing leaves here."""
 
+import json
+
 import pytest
 
 from analyst.plumbing import telegram_client as tc
@@ -244,3 +246,43 @@ def test_the_token_is_not_in_the_error_message(monkeypatch):
         tc.TelegramClient("SECRET-TOKEN")._call("sendMessage")
     except tc.TelegramError as exc:
         assert "SECRET-TOKEN" not in str(exc)
+
+
+def test_send_media_group_posts_one_request_with_every_figure(api, tmp_path):
+    """One call, one notification: the point of grouping."""
+    paths = []
+    for name in ("01_a.png", "02_b.png", "03_c.png"):
+        path = tmp_path / name
+        path.write_bytes(b"x")
+        paths.append(str(path))
+
+    tc.TelegramClient("T").send_media_group(1, paths)
+
+    url, payload = api[-1]
+    assert url.endswith("/sendMediaGroup")
+    assert len(json.loads(payload["media"])) == 3
+
+
+def test_send_media_group_attaches_each_file_by_reference(api, tmp_path):
+    path = tmp_path / "01_a.png"
+    path.write_bytes(b"x")
+    tc.TelegramClient("T").send_media_group(1, [str(path)])
+
+    media = json.loads(api[-1][1]["media"])
+    assert media[0] == {"type": "photo", "media": "attach://file0"}
+
+
+def test_send_media_group_sends_nothing_for_an_empty_list(api):
+    tc.TelegramClient("T").send_media_group(1, [])
+    assert api == []
+
+
+def test_send_media_group_caps_at_the_telegram_limit(api, tmp_path):
+    paths = []
+    for index in range(tc.MEDIA_GROUP_MAX + 3):
+        path = tmp_path / f"{index:02d}.png"
+        path.write_bytes(b"x")
+        paths.append(str(path))
+
+    tc.TelegramClient("T").send_media_group(1, paths)
+    assert len(json.loads(api[-1][1]["media"])) == tc.MEDIA_GROUP_MAX

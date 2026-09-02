@@ -8,6 +8,7 @@ import os
 
 from analyst.conversation.approvals import TelegramApprover, actions_in
 from analyst.plumbing.artifacts import ArtifactCollector
+from analyst.plumbing.telegram_client import PHOTO_MAX_BYTES
 
 NO_TEXT_REPLY = "Done, but the agent produced no text reply."
 
@@ -67,19 +68,52 @@ class ResultDelivery:
         self.send_images(chat_id, text, analysed=ran_an_analysis(result))
 
     def send_images(self, chat_id: int, text: str, analysed: bool = False) -> None:
-        """Upload the figures, then warn if the reply claimed one that is not
-        there. No caption: the reply never names files, and repeating the
-        filename under the picture would add that noise back."""
+        """Upload the figures, then warn if none arrived from a real analysis.
+
+        Several figures go as one group, so an answer is one notification
+        rather than five. No caption: every figure carries its own title, and a
+        caption under it is a second title in a smaller font.
+        """
+        paths = self._artifacts.new_images(chat_id, text)
+        grouped = [p for p in paths if self._fits_in_a_group(p)]
+        oversized = [p for p in paths if p not in grouped]
+
         sent = 0
-        for path in self._artifacts.new_images(chat_id, text):
+        if len(grouped) > 1:
             try:
-                self._client.send_photo(chat_id, path)
-                sent += 1
-            except Exception as exc:                # a failed upload must not
-                print(f"[image] failed to send {path}: {exc}")   # lose the text
-                self._client.send_message(
-                    chat_id, f"Couldn't upload {os.path.basename(path)}.")
+                self._client.send_media_group(chat_id, grouped)
+                sent += len(grouped)
+            except Exception as exc:            # fall back rather than lose them
+                print(f"[image] group send failed, sending singly: {exc}")
+                sent += self._send_each(chat_id, grouped)
+        else:
+            sent += self._send_each(chat_id, grouped)
+
+        sent += self._send_each(chat_id, oversized)
 
         warning = self._artifacts.warning_for(text, sent, analysed)
         if warning:
             self._client.send_message(chat_id, warning)
+
+    def _send_each(self, chat_id: int, paths: list[str]) -> int:
+        """One at a time. A failed upload must never cost the user the text."""
+        sent = 0
+        for path in paths:
+            try:
+                self._client.send_photo(chat_id, path)
+                sent += 1
+            except Exception as exc:
+                print(f"[image] failed to send {path}: {exc}")
+                self._client.send_message(
+                    chat_id, f"Couldn't upload {os.path.basename(path)}.")
+        return sent
+
+    @staticmethod
+    def _fits_in_a_group(path: str) -> bool:
+        """A media group carries photos only, and send_photo silently falls
+        back to a document above the photo ceiling. Such a file has to travel
+        on its own."""
+        try:
+            return os.path.getsize(path) <= PHOTO_MAX_BYTES
+        except OSError:
+            return False

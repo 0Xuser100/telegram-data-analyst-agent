@@ -57,8 +57,11 @@ class ArtifactCollector:
         self._sent.pop(key, None)
 
     def new_images(self, key: object, text: str = "") -> list[str]:
-        """Images this run produced: paths named in the reply, plus anything new
-        in output/. The reply no longer names files, so the scan is the main one.
+        """Images this run produced, in reading order.
+
+        Sorted by filename, because the agent numbers its figures 01_, 02_, …
+        for exactly this. Scan order is creation order, which is right only by
+        coincidence and breaks the moment a figure is redrawn.
         """
         started = self._started.get(key, 0)
         already = self._sent.setdefault(key, set())
@@ -72,7 +75,7 @@ class ArtifactCollector:
                     found.append(os.path.normpath(entry.path))
 
         fresh = []
-        for path in found:
+        for path in sorted(found, key=lambda p: os.path.basename(p).lower()):
             absolute = os.path.abspath(path)
             if absolute not in already:
                 already.add(absolute)

@@ -133,12 +133,14 @@ class FakeClient:
         self.messages: list[tuple[int, str]] = []
         self.html: list[tuple[int, str, list | None]] = []
         self.photos: list[tuple[int, str]] = []
+        self.groups: list[tuple[int, list[str]]] = []
         self.documents: list[tuple[int, str]] = []
         self.typing: list[int] = []
         self.answered: list[str] = []
         self.downloads: list[tuple[str, str, str]] = []
         self.download_error: Exception | None = None
         self.photo_error: Exception | None = None
+        self.group_error: Exception | None = None
 
     def send_message(self, chat_id, text, markdown=True):
         self.messages.append((chat_id, text))
@@ -150,6 +152,11 @@ class FakeClient:
         if self.photo_error:
             raise self.photo_error
         self.photos.append((chat_id, path))
+
+    def send_media_group(self, chat_id, paths):
+        if self.group_error:
+            raise self.group_error
+        self.groups.append((chat_id, list(paths)))
 
     def send_document(self, chat_id, path, caption=None):
         self.documents.append((chat_id, path))
