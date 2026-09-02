@@ -25,8 +25,8 @@ MISSING_FILE_WARNING = (
     "probably never executed — try asking again and approving the execute step."
 )
 MISSING_CHART_WARNING = (
-    "⚠️ That reply describes a chart, but no image was produced. The script was "
-    "probably never executed — ask again and approve the run step."
+    "⚠️ That analysis produced no chart. The script was probably never "
+    "executed — ask again and approve the run step."
 )
 
 
@@ -79,13 +79,17 @@ class ArtifactCollector:
                 fresh.append(path)
         return fresh
 
-    def warning_for(self, text: str, images_sent: int) -> str | None:
-        """A warning to show the user, or None when the reply is honest."""
+    def warning_for(self, text: str, images_sent: int,
+                    analysed: bool = False) -> str | None:
+        """A warning to show the user, or None when the reply is honest.
+
+        `analysed` says whether the run actually ran something. A greeting
+        legitimately produces no figures; an analysis never does.
+        """
         missing = sorted({path for path in mentioned_paths(text)
                           if not os.path.isfile(path)})
         if missing:
             return MISSING_FILE_WARNING.format(names=", ".join(missing))
-        if not images_sent and _CHART_WORD_RE.search(text or "") \
-                and _MADE_WORD_RE.search(text or ""):
+        if analysed and not images_sent:
             return MISSING_CHART_WARNING
         return None

@@ -107,16 +107,24 @@ def test_a_failed_upload_does_not_lose_the_answer(delivery, client, clean_output
     assert client.said("couldn't upload")
 
 
-def test_a_hallucinated_chart_is_called_out(delivery, client, clean_output):
+def analysed(text):
+    """A result that ran a script, which is what makes figures owed."""
+    reply = AIMessage("")
+    reply.tool_calls = [{"name": "execute", "args": {}, "id": "1"}]
+    return {"messages": [reply, AIMessage(text)]}
+
+
+def test_an_analysis_that_produced_no_chart_is_called_out(delivery, client, clean_output):
     delivery.start_run(CHAT)
-    delivery.deliver(CHAT, {"messages": [AIMessage("A chart has been saved.")]})
+    delivery.deliver(CHAT, analysed("Heart disease leads at 33.7%."))
     assert client.photos == []
-    assert client.said("no image was produced")
+    assert client.said("produced no chart")
 
 
-def test_an_honest_reply_gets_no_warning(delivery, client, clean_output):
+def test_a_greeting_is_not_asked_for_a_chart(delivery, client, clean_output):
+    """No execute call, so nothing was analysed and nothing is owed."""
     delivery.start_run(CHAT)
-    delivery.deliver(CHAT, {"messages": [AIMessage("Nothing worth plotting here.")]})
+    delivery.deliver(CHAT, {"messages": [AIMessage("Hello! Send me a CSV.")]})
     assert len(client.texts) == 1
 
 

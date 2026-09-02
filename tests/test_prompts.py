@@ -11,6 +11,11 @@ from analyst.agent.prompts import ANALYSIS_PROMPT, SYSTEM_RULES, UPLOADED_FILE_T
 
 RENDERED = SYSTEM_RULES.format(python_path=sys.executable, output_dir="./output")
 
+# The prompt is hard-wrapped, so a phrase that reads as one line in the source
+# is split by a newline and two spaces. Assert against this when the phrase is
+# longer than a few words.
+FLAT = " ".join(RENDERED.split())
+
 
 # --------------------------------------------------------------------------
 # templates render
@@ -91,16 +96,42 @@ def test_saved_to_phrasing_is_banned():
 
 
 def test_numbered_section_headings_are_banned():
-    assert "1. Data Overview" in RENDERED
+    assert "no numbered section headings" in FLAT
 
 
-def test_a_headline_and_bullets_are_requested():
-    assert "bold line" in RENDERED
-    assert "bullets" in RENDERED
+def test_the_reply_sounds_like_a_colleague():
+    assert "like a colleague who just did the work" in FLAT
+    assert "no bullet lists" in RENDERED
+    assert "no emoji" in RENDERED
 
 
-def test_the_reply_length_is_bounded():
-    assert "900 characters" in RENDERED
+def test_the_main_finding_is_still_bold():
+    """One anchor survives the move away from a report format."""
+    assert "on its own line in bold" in FLAT
+
+
+def test_judgement_calls_belong_in_the_body():
+    """The sentence explaining what was filtered and why is what makes the
+    numbers trustworthy; a footnote is not where it goes."""
+    assert "judgement call" in RENDERED
+    assert "most valuable one you will write" in FLAT
+
+
+def test_a_quality_problem_becomes_the_headline():
+    assert "qualify the analysis, it is the headline" in FLAT
+
+
+def test_dull_data_may_be_called_dull():
+    assert "manufactured insight" in RENDERED
+
+
+def test_a_truncated_run_must_admit_it():
+    assert "limit stopped your run early" in FLAT
+
+
+def test_the_length_cap_is_gone():
+    assert "900 characters" not in RENDERED
+    assert "There is no length limit" in FLAT
 
 
 # --------------------------------------------------------------------------
@@ -127,12 +158,12 @@ def test_the_agent_is_told_to_plan_and_revise():
     """The planning tool has been wired in all along and the prompt never
     mentioned it, so the agent worked one pass and stopped."""
     assert "write_todos" in RENDERED
-    assert "REVISE that plan" in RENDERED
+    assert "REVISE that plan" in FLAT
 
 
 def test_the_loop_has_a_stop_condition():
     """Without one an iterative agent circles until a bound kills it."""
-    assert "stop telling you anything new" in RENDERED
+    assert "stop telling you anything new" in FLAT
 
 
 def test_findings_are_written_down_not_remembered():
@@ -155,7 +186,7 @@ def test_aggregates_must_be_looked_for_before_summing():
 
 def test_the_inspect_step_counts_distinct_values():
     """Distinct-value counts are how the aggregate row becomes visible."""
-    assert "number of distinct values in every categorical column" in RENDERED
+    assert "number of distinct values in every categorical column" in FLAT
 
 
 def test_the_denominator_must_be_stated():
@@ -163,8 +194,7 @@ def test_the_denominator_must_be_stated():
 
 
 def test_the_answer_starts_with_what_the_data_is():
-    assert "what the data is" in RENDERED
-    assert "what one row represents" in RENDERED
+    assert "Open with what the data is" in FLAT
 
 
 # --------------------------------------------------------------------------
@@ -200,7 +230,7 @@ def test_pie_charts_are_capped():
 def test_every_analysis_has_a_floor_of_two_figures():
     """One figure meant data quality was never shown, and invisible data
     quality is how a confident wrong number gets out."""
-    assert "AT LEAST two figures" in RENDERED
+    assert "AT LEAST two figures" in FLAT
     assert "data-quality figure" in RENDERED
     assert "main comparison" in RENDERED
 
@@ -213,15 +243,15 @@ def test_the_conditional_panels_each_name_their_trigger(panel):
 
 def test_an_unsupported_panel_is_left_out_not_drawn_empty():
     assert "LEFT OUT" in RENDERED
-    assert "never drawn empty" in RENDERED
+    assert "never drawn empty" in FLAT
 
 
 def test_the_figure_count_is_capped():
-    assert "Five figures is the ceiling" in RENDERED
+    assert "Five figures is the ceiling" in FLAT
 
 
 def test_thin_data_gets_one_figure_and_an_explanation():
-    assert "two columns, or thirty rows" in RENDERED
+    assert "two columns, or thirty rows" in FLAT
 
 
 def test_figures_are_named_in_reading_order():
@@ -238,7 +268,7 @@ def test_the_seaborn_palette_trap_is_a_positive_instruction():
     """It was already warned about, and the model tripped it anyway, costing an
     edit and a re-run. A warning that does not prevent the error it names is
     not pulling its weight."""
-    assert "ALWAYS pass `hue=<same column as x>, legend=False`" in RENDERED
+    assert "ALWAYS pass `hue=<same column as x>, legend=False`" in FLAT
 
 
 def test_show_is_forbidden():

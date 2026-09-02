@@ -110,25 +110,29 @@ def test_named_but_missing_file_is_reported(collector):
     assert "does not exist" in warning
 
 
-def test_claimed_chart_with_no_image_is_reported(collector):
-    """The reply no longer names paths, so the guard also has to catch a chart
-    that was described but never produced."""
-    warning = collector.warning_for("A chart of the trend has been saved.", images_sent=0)
-    assert "no image was produced" in warning
+def test_an_analysis_that_produced_nothing_is_reported(collector):
+    """Structural, not lexical. The old check looked for "saved"/"created"
+    beside "chart"; the reply voice uses none of those words, so it went quiet
+    exactly when it was needed. Every analysis now owes at least two figures,
+    so zero figures after a real run is wrong whatever the text says."""
+    warning = collector.warning_for("Heart disease leads at 33.7%.",
+                                    images_sent=0, analysed=True)
+    assert "produced no chart" in warning
 
 
 def test_no_warning_when_an_image_was_sent(collector):
-    assert collector.warning_for("The chart is attached.", images_sent=1) is None
+    assert collector.warning_for("Chart's below.", images_sent=1,
+                                 analysed=True) is None
 
 
 @pytest.mark.parametrize("text", [
-    "Nothing to plot here — the file has a single column.",
-    "I wrote the script but the run was rejected, so no chart exists.",
-    "**Revenue $840** across 5 days. Widget A leads at 50.6%.",
+    "Hello! Send me a CSV and I'll take a look.",
+    "I can analyse spreadsheets — upload one and ask me anything.",
     "",
 ])
-def test_replies_without_a_chart_claim_are_not_flagged(collector, text):
-    assert collector.warning_for(text, images_sent=0) is None
+def test_a_reply_that_analysed_nothing_is_not_flagged(collector, text):
+    """A greeting legitimately produces no figures."""
+    assert collector.warning_for(text, images_sent=0, analysed=False) is None
 
 
 def test_an_existing_file_is_not_called_missing(collector, clean_output, monkeypatch):
