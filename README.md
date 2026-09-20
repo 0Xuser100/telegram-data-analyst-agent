@@ -1,5 +1,7 @@
 # Telegram Data Analyst Agent
 
+![Telegram Data Analyst Agent](assets/banner.webp)
+
 Send this agent a CSV file. It writes its own Python script, runs it, makes a
 chart, and sends you a short summary. It asks you before it writes any file or
 runs any command.
